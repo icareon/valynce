@@ -1,114 +1,150 @@
-# Valynce
+<h1 align="center">Valynce</h1>
 
-Valynce is a local-first quality tool. It runs on your own machine, with a browser interface on top of a local backend, and applies rules and AI-assisted analysis to non-conformance reports (NCRs).
+<p align="center">
+  <strong>Local-first quality analysis for manufacturers.</strong>
+</p>
 
-> **Status:** Week 1, increment 3 of 6. The app ranks defect categories by report count, affected quantity or recorded cost (Pareto analysis), lists and filters the reports, and imports CSV files with row-by-row checks. AI summary, record export and the `npx` launcher are not built yet.
+<p align="center">
+  Import your non-conformance reports (NCRs) from CSV, see which defect categories matter most by report count,
+  affected quantity or recorded cost, and trace every figure back to the row it came from.<br />
+  It runs on your own computer. Your records are not sent anywhere.
+</p>
 
-![Overview in the light theme](docs/screenshots/overview-light.png)
+<p align="center">
+  Built by <a href="https://paulshahidi.com">Paul Shahidi, PhD</a>, former Apple and Anduril engineering leader, building manufacturing tools in public.
+</p>
 
-## Try it
+<p align="center">
+  <a href="https://github.com/icareon/valynce/actions/workflows/ci.yml"><img src="https://github.com/icareon/valynce/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://github.com/icareon/valynce/releases"><img src="https://img.shields.io/github/v/release/icareon/valynce?include_prereleases&label=release" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/node-%E2%89%A5%2024.15-339933" alt="Node.js 24.15 or newer">
+</p>
 
-Requires Node.js 24.15 or newer.
+<p align="center">
+  <a href="https://github.com/icareon/valynce/releases/download/v0.1.0-alpha.4/valynce-pareto-demo.mp4">
+    <img src="docs/screenshots/overview-light.png" alt="Valynce overview: totals and a Pareto chart of NCR reports by defect category, shown with synthetic demo data" width="900">
+  </a>
+</p>
 
-```
+<p align="center">
+  <a href="https://github.com/icareon/valynce/releases/download/v0.1.0-alpha.4/valynce-pareto-demo.mp4"><strong>Watch the 20-second demo</strong></a>:
+  the same ten reports ranked three ways, with a different category on top each time.<br />
+  <sub>Every screenshot and the demo use synthetic data that ships with the project.</sub>
+</p>
+
+---
+
+## Quick start
+
+Requires **Node.js 24.15.0 or newer** and git.
+
+```bash
+git clone https://github.com/icareon/valynce.git
+cd valynce
 npm ci
 npm run build
 npm start
 ```
 
-Then open http://127.0.0.1:4310. A new database is empty; choose **Load demo data** to add 24 synthetic reports, and **Remove demo data** to take them out again, or import your own CSV file. Press Ctrl+C in the terminal to stop the server.
+Open [http://127.0.0.1:4310](http://127.0.0.1:4310). Press `Ctrl+C` in the terminal to stop.
 
-For development, `npm run dev` runs the backend with reload and the interface at http://127.0.0.1:5310, using a separate database in `./data`.
+A new installation starts empty. From there:
 
-| Command | What it does |
+- **Load demo data** adds 24 synthetic reports, clearly tagged, which you can remove again with one click.
+- **Import** takes a CSV file. To see the Pareto analysis at its clearest, import [`fixtures/pareto-check.csv`](fixtures/pareto-check.csv), then switch the metric on the Overview. Labeling leads by report count, Dimensional by affected quantity and Material by recorded cost.
+
+To run exactly the tagged alpha, check it out before installing: `git checkout v0.1.0-alpha.4`.
+
+Valynce is not published to npm yet, so there is no `npx` command.
+
+## What it does today
+
+| | |
 |---|---|
-| `npm run dev` | Development servers with reload |
-| `npm test` | Runs the tests |
-| `npm run typecheck` | Type-checks everything |
-| `npm run build` | Builds into `dist` |
-| `npm start` | Serves the built app |
-| `npm run check:browser` | Drives the built app in headless Chrome and writes screenshots |
-| `npm run demo:record` | Records the 20-second Pareto demo to `demo/out/` |
+| **CSV import and validation** | Matches columns by header, lets you correct the mapping, and shows what every row will do before anything is stored. Each rejected row is listed with its row number and reason. |
+| **No guessing** | A date such as `03/04/2026` or a number such as `1,234` can be read two ways. When the file does not settle it, you choose, and the preview shows how each number will be read. |
+| **Source traceability** | Each imported report keeps its file name, row number and original cells. An import can be undone, which removes exactly the reports it added. |
+| **Pareto analysis** | Ranks defect categories by NCR count, affected quantity or recorded cost, with share of total and cumulative share. Select a category to list its reports. |
+| **Separate currencies and units** | Dollars are never added to euros, or pieces to kilograms. Each gets its own total and its own ranking. |
+| **Light and dark themes** | Switch from the top right. The choice is remembered on your computer. |
+| **Local persistence** | Reports live in a SQLite database on your machine and survive restarts and updates. |
+| **CSV export** | Exports the ranking on screen, using the same reports as the chart. |
+
+<p align="center">
+  <img src="docs/screenshots/pareto-cost-light.png" alt="Recorded cost by category with one category selected and its reports listed below" width="900">
+</p>
+
+## Light and dark
+
+| Light | Dark |
+|---|---|
+| ![Overview in the light theme](docs/screenshots/overview-light.png) | ![Overview in the dark theme](docs/screenshots/overview-dark.png) |
+| ![Import in the light theme](docs/screenshots/import-light.png) | ![Import in the dark theme](docs/screenshots/import-dark.png) |
+| ![Record detail in the light theme](docs/screenshots/detail-light.png) | ![Record detail in the dark theme](docs/screenshots/detail-dark.png) |
+
+## Your data stays on your computer
+
+- **Local only.** The server listens on `127.0.0.1`, so other machines cannot reach it. It refuses requests under other host names and writes coming from other websites.
+- **No outside requests.** Fonts are bundled. The app contacts nothing but its own local server, and there is no telemetry.
+- **Where the database lives.** In your per-user data folder, outside the project folder, so updating or deleting the project does not touch your records:
+
+  | System | Folder |
+  |---|---|
+  | macOS | `~/Library/Application Support/Valynce` |
+  | Linux | `~/.local/share/valynce` (or `$XDG_DATA_HOME/valynce`) |
+  | Windows | `%APPDATA%\Valynce` |
+
+  Set `VALYNCE_DATA_DIR` to use another folder and `VALYNCE_PORT` to change the port, in your shell or in a `.env` file copied from [`.env.example`](.env.example).
+- **Backups.** When a newer version needs to change the database's structure, it first saves an untouched copy beside it, named like `valynce.db.v3.bak`. There are no scheduled backups: to make your own, stop Valynce and copy `valynce.db`.
 
 ## What the numbers mean
 
-Valynce shows three different metrics and keeps them apart:
-
-- **NCR reports**: the number of reports. Each counts once, however many units it covers.
-- **Affected quantity**: the quantity affected, summed over the reports that state one. With no unit it is a count of pieces.
-- **Recorded cost**: the cost written on the reports, summed over those that state one. It is not an estimate of total cost of poor quality.
-
-Each card says how many reports had a value, for example "Quantity recorded in 21 of 24 reports."
-
-- A value that was not recorded is shown as "—" or "Not recorded". It is never treated as zero.
-- Costs carry a currency. A cost with no stated currency is shown as "Currency unspecified" and is never assumed to be dollars.
-- Amounts in different currencies, and quantities in different units, are never added together; each gets its own total.
-- The cause on a report is shown as the *reported* cause. Valynce does not claim it is a verified root cause.
-
-## Pareto analysis
-
-The Overview ranks defect categories from largest to smallest by one metric at a time. Switch between **NCR reports**, **Affected quantity** and **Recorded cost** to see how the priority changes: the category with the most reports is often not the one with the most units or the most cost.
-
-![Recorded cost by category, with one category selected](docs/screenshots/pareto-cost-light.png)
-
-- **Bars** show each category's share of the total. **The line** shows the cumulative share on the same 0 to 100% scale.
-- **One unit at a time.** Costs in different currencies and quantities in different units cannot be added, so each gets its own ranking, chosen with the buttons beside the metric.
-- **Coverage is stated.** The line under the title says how many reports have a value for the metric. Reports with none are left out of the ranking and are never counted as zero.
-- **One population.** The chart, the table under it and **Export CSV** all cover the same reports: those matching the search and status filter.
-- **Select a category** to list its reports below. The readout says how many of them contribute to the bar.
-- **Not a cause.** The ranking shows where reports, quantity or cost are recorded. It does not show why, and the leading category is not a verified root cause.
-
-`fixtures/pareto-check.csv` is a ten-row synthetic file small enough to check by hand, in which each metric puts a different category first. `npm run build && npm run demo:record` records a 20-second video of it to `demo/out/`.
-
-## Light and dark themes
-
-The button at the top right switches theme. Light is the default; the choice is remembered on this computer.
-
-![Overview in the dark theme](docs/screenshots/overview-dark.png)
-
-## Importing a CSV file
-
-Open **Import**, choose a CSV file, check the column matching, and import. To try it, use the synthetic example in `fixtures/ncr-import-example.csv`: 18 rows, of which 11 import and 7 are deliberately wrong in different ways.
-
-- **Column mapping.** Valynce matches columns it recognises by header name. You can change any of them, and only the NCR ID is required.
-- **No guessing.** A date such as 03/04/2026 could be March or April, and a number such as 1,234 could be 1234 or 1.234. When the file does not settle it, you choose, and the preview shows how each number will be read before anything is stored.
-- **Exact values.** An amount with a currency symbol or more than two decimals is rejected, not adjusted.
-- **Units.** A quantity with no unit is a whole count of pieces. A fractional quantity is accepted only with a unit of measure such as kg, from a unit column or the import settings.
-- **Row-by-row results.** Before anything is stored you see which rows will be imported and, for every other row, its row number and the reason.
-- **Duplicates.** A row whose NCR ID is already stored, or appeared earlier in the same file, is skipped and reported. Stored records are never overwritten, so importing the same file twice adds nothing.
-- **Traceability.** Each imported report keeps the file name, the row it came from and that row's original cells. Open a record to see them.
-- **Undo.** The Import view lists imported files; removing one removes exactly the reports it added.
-
-Files must be UTF-8 text with a header row, separated by commas, semicolons or tabs, up to 20 MB.
-
-## Layout
-
-| Folder | Contents |
+| Term | Meaning |
 |---|---|
-| `src/ui` | Browser interface |
-| `src/server` | Local backend |
-| `src/modules/quality` | NCR rules and analysis |
-| `src/core` | Shared entities and storage |
-| `src/ai` | Model adapters and prompts |
-| `src/cli` | NPX launcher |
-| `fixtures` | Synthetic example records |
-| `tests` | Meaningful correctness checks |
-| `demo` | Remotion video project |
+| **NCR count** | The number of reports. Each report counts once, however many units it covers. |
+| **Affected quantity** | The quantity the reports say was affected. With no unit it is a whole count of pieces; with a unit of measure such as kg it may be fractional. |
+| **Recorded cost** | The cost written on the reports. It is not an estimate of the total cost of poor quality. |
+| **Share / cumulative** | A category's part of the total of the values that were recorded, and the running sum of those parts down the ranking. |
+| **Reported cause** | The cause as written on the report. Valynce does not treat it as verified. |
 
-## Your data stays local
+Three rules hold everywhere:
 
-- The server listens on `127.0.0.1` only, so it is not reachable from other machines.
-- Records live in a SQLite database in your user data folder, outside the app's install folder, so updating Valynce does not erase them:
-  - macOS: `~/Library/Application Support/Valynce`
-  - Linux: `~/.local/share/valynce` (or `$XDG_DATA_HOME/valynce`)
-  - Windows: `%APPDATA%\Valynce`
-  - Set `VALYNCE_DATA_DIR` to use another folder, and `VALYNCE_PORT` to change the port. Set them in your shell, or copy `.env.example` to `.env` (git-ignored) and fill them in there.
-- This repository is public and contains no customer data, databases or credentials. Everything in `fixtures` is synthetic.
+- **Missing is not zero.** A value that was not recorded is shown as "—" or "Not recorded" and is left out of sums. Every total and every chart says how many reports it covers.
+- **Nothing is assumed.** A cost with no stated currency is shown as "Currency unspecified". It is never taken to be dollars and never added to costs in a known currency.
+- **A ranking is not a cause.** The Pareto chart shows where reports, quantity or cost are recorded. It does not show why, and the leading category is not a verified root cause.
+
+## Alpha limitations
+
+This is an early alpha, `v0.1.0-alpha.4`. Expect rough edges.
+
+- **Checked on one platform.** Development and automated checks ran on macOS with Chrome. Windows, Linux desktops, Safari, Firefox and screen readers have not been checked by hand. CI runs installation, type checking, tests and the build on Linux.
+- **CSV only, UTF-8 only.** Files need a header row and comma, semicolon or tab separators, up to 20 MB. Excel workbooks are not read.
+- **No editing.** Reports cannot be edited or added by hand, only imported or removed with their import.
+- **Duplicates are skipped.** A row whose NCR ID is already stored is reported and left out. There is no option to update a stored report from a file.
+- **Export is the ranking only.** Exporting the reports themselves is not built yet.
+- **One grouping.** The Pareto chart groups by defect category only.
+- **Built-in SQLite.** Storage uses Node's `node:sqlite` module, which Node labels a release candidate.
+- **No AI features.** See below.
+
+## Roadmap
+
+Planned, not built. Order may change.
+
+1. An optional summary of the analysis that cites the report IDs it is based on, sent to a model only when you ask.
+2. Export of the reports themselves.
+3. A packaged launcher, so the app starts with one command.
+
+## How it is built
+
+TypeScript throughout: a React interface built with Vite, a small Hono server on Node, and SQLite for storage. Quality rules, storage, interface and server are kept in separate folders, described in [AGENTS.md](AGENTS.md).
+
+**Valynce contains no AI features today.** No model is called and no summary is generated. AI coding agents assisted in writing the code, working under the rules in [AGENTS.md](AGENTS.md) and checked by the tests and browser checks in this repository.
 
 ## Contributing
 
-Read [AGENTS.md](AGENTS.md) before opening a pull request. It holds the project rules for both people and coding agents, including what must never be committed.
+Bug reports and ideas are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) first, and use only synthetic or sanitized examples: this repository is public and must never hold real customer data.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) © 2026 Paul Shahidi. Bundled fonts and libraries keep their own licenses, listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

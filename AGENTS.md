@@ -2,6 +2,10 @@
 
 These rules apply to every contributor and every coding agent working in this repository. `CLAUDE.md` imports this file, so edit the rules here only.
 
+## Current status
+
+Read `docs/SESSION_CHECKPOINT.md` before starting. It records where work stopped, what was verified and what is still outstanding. If it says development is paused, do not change product code until asked.
+
 ## How we work
 
 - **Build incrementally.** Each increment is a small, runnable step. Do not start the next one until the current one builds, passes its checks and has been tried.

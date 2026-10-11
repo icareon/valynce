@@ -1,0 +1,55 @@
+name: Bug report
+description: Something in Valynce does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for the report.
+
+        **This repository is public. Do not paste real NCRs, part numbers, supplier or customer names, or screenshots of real records.** Use `fixtures/ncr-import-example.csv`, `fixtures/pareto-check.csv`, or a few invented rows that show the same problem.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Load demo data
+        2. Open Import and choose ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Synthetic example
+      description: If a file triggers the problem, paste a few invented rows that reproduce it. Never real data.
+      render: csv
+  - type: input
+    id: version
+    attributes:
+      label: Valynce version
+      description: The tag or commit you are running, for example v0.1.0-alpha.4.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: System
+      description: Operating system, browser and the output of `node --version`.
+      placeholder: macOS 15, Chrome 140, Node v24.21.0
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before submitting
+      options:
+        - label: This report contains no real customer data, credentials or database files.
+          required: true

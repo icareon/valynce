@@ -1,0 +1,39 @@
+name: Feature request
+description: Suggest something Valynce should do.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Valynce is an early alpha with a deliberately short roadmap, so requests that describe a real quality-engineering task are the most useful.
+
+        **This repository is public. Describe your situation with invented or sanitized examples, never real records.**
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The task or question, in your own words. For example, "see which supplier has the most open reports this quarter".
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: How do you do it today?
+      description: A spreadsheet, another tool, by hand, or not at all.
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: Your idea of how Valynce could support it. A rough sketch is fine.
+  - type: textarea
+    id: example
+    attributes:
+      label: Synthetic example
+      description: A few invented rows or figures that show the case. Never real data.
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Before submitting
+      options:
+        - label: This request contains no real customer data.
+          required: true
