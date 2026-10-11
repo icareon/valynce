@@ -170,6 +170,12 @@ async function choose(selector, label) {
   })()`);
 }
 
+async function upload(selector, path) {
+  const { root: doc } = await cdp('DOM.getDocument');
+  const { nodeId } = await cdp('DOM.querySelector', { nodeId: doc.nodeId, selector });
+  await cdp('DOM.setFileInputFiles', { nodeId, files: [path] });
+}
+
 async function viewport(width, height) {
   await cdp('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
   await sleep(250);
@@ -253,7 +259,7 @@ async function run() {
   await startServer();
   await goto();
   check('a new database opens empty, with a one-sentence explanation', await page(`$('.empty') !== null && $('table') === null`));
-  check('the empty state offers "Load demo data"', await page(`byText('.empty .btn', 'Load demo data') !== undefined`));
+  check('the empty state offers "Load demo data" and a link to CSV import', await page(`byText('.empty .btn', 'Load demo data') !== undefined && byText('.empty a.btn', 'Import a CSV file')?.getAttribute('href') === '#/import'`));
   await screenshot('empty-1440x900');
 
   // --- Load demo data ---
@@ -269,7 +275,6 @@ async function run() {
   check('chart bars add up to the 24 stored reports', (await page(barSum)) === 24);
   check('the chart has an Uncategorized bucket of 2', await page(`byText('.bar', 'Uncategorized')?.querySelector('.bar-count').textContent.startsWith('2')`));
   check('demo data is flagged with a notice and per-row tags', await page(`text('.demo-notice').includes('Demo data') && $$('tbody .tag').length === 24`));
-  check('no upload or import control is shown before import exists, or it works', await page(`$$('input[type=file]').every((el) => !el.disabled)`));
 
   for (const [width, height] of [[1440, 900], [1280, 800]]) {
     await viewport(width, height);
@@ -324,9 +329,13 @@ async function run() {
   check('the detail panel shows description, disposition and reported cause', ['Description', 'Disposition', 'Reported cause'].every((label) => detail.includes(label)));
   check('reported cause is marked as not a verified root cause', detail.includes('no verified root cause'));
   check('the detail panel identifies demo data', await page(`$('.detail .tag') !== null && text('.detail').includes('Synthetic demo data')`));
-  await screenshot('detail-1440x900');
-  await viewport(1280, 800);
-  await screenshot('detail-1280x800');
+  const squeezed = `$$('thead th').filter((th) => th.offsetWidth > 0).map((th) => Math.round(th.getBoundingClientRect().width))`;
+  for (const [width, height] of [[1440, 900], [1280, 800]]) {
+    await viewport(width, height);
+    const widths = await page(squeezed);
+    check(`with the panel open at ${width}x${height}, no table column is squeezed unreadable`, widths.every((w) => w >= 72) && await page(`$('thead th.col-category').offsetWidth > 0`), JSON.stringify(widths));
+    await screenshot(`detail-${width}x${height}`);
+  }
   await viewport(1440, 900);
   await press('Escape');
   await waitFor(`$('.detail') === null`);
@@ -343,7 +352,10 @@ async function run() {
   await click(`byText('.rail a', 'Records')`);
   await waitFor(`text('.page-head h1') === 'Records'`);
   check('the Records view lists all 24 reports without the chart', (await page(rowCount)) === 24 && await page(`$('.chart') === null`));
-  check('the table header is sticky', await page(`getComputedStyle($('thead th')).position === 'sticky'`));
+  await page(`$('.main').scrollTo(0, 400)`);
+  await sleep(100);
+  check('the table header stays in view while the list scrolls', await page(`Math.abs($('thead th').getBoundingClientRect().top - $('.main').getBoundingClientRect().top) < 2`));
+  await page(`$('.main').scrollTo(0, 0)`);
   for (const [width, height] of [[1440, 900], [1280, 800]]) {
     await viewport(width, height);
     const overflow = await page(OVERFLOW);
@@ -356,17 +368,120 @@ async function run() {
   await screenshot('records-390x800');
   await viewport(1440, 900);
 
+  // --- CSV import ---
+  const exampleCsv = join(root, 'fixtures', 'ncr-import-example.csv');
+  const chips = `$$('.chip').map((el) => el.textContent.trim())`;
+  await click(`byText('.rail a', 'Import')`);
+  await waitFor(`text('.page-head h1') === 'Import CSV'`);
+  check('the Import view starts with only a file chooser', await page(`$('input[type=file]') !== null && $('.map-grid') === null`));
+  await upload('input[type=file]', exampleCsv);
+  await waitFor(`$('.chips') !== null`);
+  check('every column of the example file is matched to a field', await page(`$$('.map-row select').length === 12 && $$('.map-row select').every((el) => el.value !== '')`));
+  check('the unambiguous ISO date format is detected', await page(`$('.settings select').value === 'YMD'`));
+  check('the preview counts 11 to import, 4 errors, 2 repeats and 1 blank row',
+    JSON.stringify(await page(chips)) === JSON.stringify(['11 will be imported', '4 with errors', '2 repeated in the file', '1 blank']), JSON.stringify(await page(chips)));
+  check('each skipped row is listed with its row number and reason', await page(`$$('#skipped-title ~ .table-wrap tbody tr').length === 6 && text('#skipped-title ~ .table-wrap').includes('NCR ID is empty.') && text('#skipped-title ~ .table-wrap').includes('not a real calendar date')`));
+  check('nothing is stored by previewing', (await (await fetch(base + '/api/ncrs')).json()).records.length === 24);
+  for (const [width, height] of [[1440, 900], [1280, 800]]) {
+    await viewport(width, height);
+    const overflow = await page(OVERFLOW);
+    check(`Import view fits at ${width}x${height}`, !overflow.page && !overflow.main && overflow.clipped === 0, JSON.stringify(overflow));
+    await screenshot(`import-${width}x${height}`);
+  }
+  await viewport(1440, 900);
+  const weakImport = await page(CONTRAST.replace("const selectors = [", "const selectors = ['.hint', '.chip', '.map-row label', '.map-example', '.settings label span', '.table-plain td', '.file-name', "));
+  check('Import view text contrast is at least 4.5:1', weakImport.length === 0, weakImport.join(', '));
+
+  await choose('#map-ncrNumber', 'Not in this file');
+  await waitFor(`$('#step-check ~ .alert') !== null`);
+  check('unmapping the NCR ID blocks the import with an explanation', await page(`text('#step-check ~ .alert').includes('NCR ID') && byText('.button-row .btn', 'Import').disabled`));
+  await choose('#map-ncrNumber', 'NCR No');
+  await waitFor(`$('#step-check ~ .alert') === null && !byText('.button-row .btn', 'Import').disabled`);
+
+  await type('.currency-input', 'gbp');
+  await waitFor(`$$('.hint').every((el) => !el.textContent.includes('will be stored as currency unspecified'))`);
+  check('a chosen currency applies to costs that state none', await page(`$('.currency-input').value === 'GBP'`));
+  await type('.currency-input', '');
+  await page(`(() => { const el = $('.currency-input'); Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, ''); el.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+  await waitFor(`$$('.hint').some((el) => el.textContent.includes('will be stored as currency unspecified'))`);
+
+  await click(`byText('.button-row .btn', 'Import 11 reports')`);
+  await waitFor(`$('.import-done') !== null`);
+  check('the result states what was imported and what was not', await page(`text('.import-done').includes('Imported 11 reports from ncr-import-example.csv') && text('.import-done').includes('6 rows were not imported')`));
+  await screenshot('import-done-1440x900');
+
+  await click(`byText('.import-done a', 'View records')`);
+  await waitFor(`text('.page-head h1') === 'Records' && ${rowCount} === 35`);
+  check('the records list now holds 24 demo and 11 imported reports', (await page(countText)) === '35 reports' && await page(`text('.demo-notice').includes('24 of 35 reports are synthetic')`));
+  await type('.search input', 'EX-NCR-0107');
+  await waitFor(`${rowCount} === 1`);
+  check('an imported report is not tagged as demo data', await page(`$('tbody .tag') === null`));
+  check('a cost with no currency is shown with the unspecified mark, not a dollar sign', await page(`text('tbody td.col-cost').includes('210.00') && text('tbody td.col-cost').includes('currency unspecified') && !text('tbody td.col-cost').includes('$')`), await page(`text('tbody td.col-cost')`));
+  await click(`$('tbody .row-open')`);
+  await waitFor(`$('.detail') !== null`);
+  const imported = await page(`text('.detail')`);
+  check('the detail panel traces the report to its file and row', imported.includes('ncr-import-example.csv') && /Row in file\s*8/.test(imported) && imported.includes('Currency unspecified'), imported);
+  await click(`$('.source-row summary')`);
+  check('the original file row can be inspected', await page(`$('.source-row').open && text('.source-row').includes('Bath concentration low')`));
+  await screenshot('detail-imported-1440x900');
+  await press('Escape');
+  await waitFor(`$('.detail') === null`);
+  await click(`byText('.toolbar .btn', 'Clear filters')`);
+
+  // --- Mixed currencies on the overview ---
+  await click(`byText('.rail a', 'Overview')`);
+  await waitFor(`$$('.metric').length === 3`);
+  const costs = await page(`$$('.metric-costs li').map((li) => li.textContent.replace(/\\s+/g, ' ').trim())`);
+  check('recorded cost shows one total per currency and never a combined sum',
+    costs.length === 3 && costs[0].startsWith('€3,580.40') && costs[1].startsWith('$22,535.25') && costs[2].startsWith('210.00') && costs[2].includes('Currency unspecified'), JSON.stringify(costs));
+  const mixed = await page(`$$('.metric').map((m) => [m.querySelector('.metric-value')?.textContent.trim() ?? null, m.querySelector('.metric-coverage').textContent])`);
+  check('report and unit totals include the imported rows', mixed[0][0] === '35' && mixed[1][0] === '2,618' && mixed[1][1] === 'Quantity recorded in 30 of 35 reports.' && mixed[2][1].startsWith('Cost recorded in 29 of 35 reports.'), JSON.stringify(mixed));
+  check('chart bars add up to all 35 reports', (await page(barSum)) === 35);
+  for (const [width, height] of [[1440, 900], [1280, 800]]) {
+    await viewport(width, height);
+    const overflow = await page(OVERFLOW);
+    check(`overview with three currencies fits at ${width}x${height}`, !overflow.page && !overflow.main && overflow.clipped === 0, JSON.stringify(overflow));
+    await screenshot(`overview-mixed-${width}x${height}`);
+  }
+  await viewport(1440, 900);
+
+  // --- Importing the same file again ---
+  await click(`byText('.rail a', 'Import')`);
+  await waitFor(`text('.page-head h1') === 'Import CSV'`);
+  check('the earlier import is listed with its counts', await page(`text('#previous-imports ~ .table-wrap').includes('ncr-import-example.csv')`));
+  await upload('input[type=file]', exampleCsv);
+  await waitFor(`$('.chips') !== null`);
+  check('importing the same file again would add nothing', JSON.stringify(await page(chips)) === JSON.stringify(['0 will be imported', '4 with errors', '13 already stored', '1 blank']) && await page(`byText('.button-row .btn', 'Import').disabled`), JSON.stringify(await page(chips)));
+
   // --- Persistence across a restart ---
   await stopServer();
   await startServer();
-  await goto('#/overview');
-  await waitFor(`${rowCount} === 24`);
-  check('the 24 reports are still there after restarting the server', (await page(`text('.metric-value')`)) === '24');
+  await goto('#/records');
+  await waitFor(`${rowCount} === 35`);
+  check('all 35 reports are still there after restarting the server', (await page(countText)) === '35 reports');
+  await type('.search input', 'EX-NCR-0105');
+  await waitFor(`${rowCount} === 1`);
+  await click(`$('tbody .row-open')`);
+  await waitFor(`$('.detail') !== null`);
+  check('an imported report keeps its values and source after a restart', await page(`text('.detail').includes('€2,400.00 (EUR)') && text('.detail').includes('ncr-import-example.csv') && text('.detail').includes('Grade B')`));
+  await press('Escape');
+  await click(`byText('.toolbar .btn', 'Clear filters')`);
 
-  // --- Remove demo data ---
+  // --- Remove demo data, then the import ---
   await click(`byText('.demo-notice .btn', 'Remove demo data')`);
+  await waitFor(`${rowCount} === 11`);
+  check('removing demo data leaves the 11 imported reports', (await page(countText)) === '11 reports' && await page(`$('.demo-notice') === null`));
+  await click(`byText('.rail a', 'Import')`);
+  await waitFor(`$('#previous-imports') !== null`);
+  await page(`byText('td.actions .btn', 'Remove').focus()`);
+  await press('Enter');
+  await waitFor(`byText('td.actions .btn', 'Remove 11 reports') !== undefined`);
+  check('removing an import asks for confirmation first', (await (await fetch(base + '/api/ncrs')).json()).records.length === 11);
+  await click(`byText('td.actions .btn', 'Remove 11 reports')`);
+  await waitFor(`$('#previous-imports') === null`);
+  await click(`byText('.rail a', 'Overview')`);
   await waitFor(`$('.empty') !== null`);
-  check('removing demo data returns to the empty state', await page(`$('table') === null`));
+  check('removing the import returns to the empty state', await page(`$('table') === null`));
   await stopServer();
   await startServer();
   await goto();

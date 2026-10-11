@@ -1,0 +1,20 @@
+NCR No,Date Opened,Part No,Vendor,Defect Type,Issue,Qty,Cost,Currency,State,Disposition,Root Cause
+EX-NCR-0101,2026-07-02,EX-1001,Example Supplier North,Dimensional,Slot width above upper limit,40,1250.00,USD,Closed,Scrap,Worn cutter
+EX-NCR-0102,2026-07-06,EX-1001,Example Supplier North,Dimensional,Slot width above upper limit,22,687.50,USD,Closed,Scrap,Worn cutter
+EX-NCR-0103,2026-07-09,EX-2040,Example Supplier East,Surface finish,"Scratches on cover, visible after cleaning",150,300.00,USD,Closed,Rework,Handling damage
+EX-NCR-0104,2026-07-14,EX-3310,,Assembly,Bracket fitted on wrong side,6,,,Open,,
+EX-NCR-0105,2026-07-15,EX-4100,Example Supplier West,Material,"Label reads ""Grade B"" but order was Grade A",80,2400.00,EUR,Closed,Return to supplier,Stock mix-up at supplier
+EX-NCR-0106,2026-07-21,EX-4100,Example Supplier West,Material,Hardness below specification,35,1180.40,EUR,Open,Scrap,
+EX-NCR-0107,2026-07-23,EX-2041,Example Supplier East,Surface finish,Coating thickness below minimum,60,210.00,,Closed,Rework,Bath concentration low
+EX-NCR-0108,2026-07-28,EX-5005,Example Supplier South,Documentation,Certificate missing from shipment,,0,USD,Closed,Use as is,
+EX-NCR-0109,2026-08-03,EX-1002,Example Supplier North,Dimensional,"Flatness out of tolerance
+on two of five sampled parts",,95.25,USD,Open,Rework,
+EX-NCR-0110,2026-08-05,EX-7700,,,Customer complaint awaiting details,3,,,Open,,
+EX-NCR-0102,2026-07-06,EX-1001,Example Supplier North,Dimensional,Slot width above upper limit,22,687.50,USD,Closed,Scrap,Worn cutter
+EX-NCR-0103,2026-07-10,EX-2040,Example Supplier East,Surface finish,Scratches on cover,150,320.00,USD,Closed,Rework,Handling damage
+,2026-08-10,EX-1003,Example Supplier North,Dimensional,Thread depth short,300,450.00,USD,Closed,Rework,
+EX-NCR-0111,2026-02-30,EX-1003,Example Supplier North,Dimensional,Chamfer missing,80,120.00,USD,Open,Rework,
+EX-NCR-0112,2026-08-12,EX-3311,,Assembly,Connector not fully seated,12.5,72.00,USD,Open,,
+EX-NCR-0113,2026-08-13,EX-2041,Example Supplier East,Surface finish,Discoloration after coating,30,$45.00,,Open,,
+,,,,,,,,,,,
+EX-NCR-0114,2026-08-18,EX-6020,Example Supplier South,Labeling,Lot label does not match packing list,500,50.00,USD,Closed,Use as is,Label printed from previous lot

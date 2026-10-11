@@ -1,6 +1,6 @@
 {
   "name": "valynce",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "Local-first NCR analyzer",
   "private": true,
   "type": "module",

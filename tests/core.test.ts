@@ -142,6 +142,9 @@ test('opening an older database keeps every record, backs it up and does not inv
     assert.equal(byNumber.get('REAL-1')?.quantityAffected, 7);
     assert.equal(byNumber.get('REAL-1')?.currency, null);
     assert.equal(byNumber.get('REAL-2')?.costCents, null);
+    // Records from before imports were tracked have no source, and none is made up.
+    assert.equal(byNumber.get('REAL-1')?.importBatchId, null);
+    assert.equal(byNumber.get('REAL-1')?.sourceValues, null);
     // Valynce's own synthetic records are defined as USD.
     assert.equal(byNumber.get('SYN-NCR-0001')?.currency, 'USD');
     assert.equal(byNumber.get('SYN-NCR-0008')?.currency, null);

@@ -69,6 +69,16 @@ These terms keep their shop-floor meaning. Do not rename, merge or reinterpret t
 - Never add amounts in different currencies, or stated and unstated ones, together. Show one total per currency. Valynce does not convert.
 - Categories, statuses and other values are compared exactly as written. Do not merge, rename or normalise them.
 
+## Import rules
+
+- Reading a file never guesses. A date that could be read two ways blocks the import until the user chooses the format; an amount is read exactly or the row is rejected; nothing is rounded.
+- A currency comes from the file's currency column or from the setting the user chose for that import. It is never taken from a symbol or assumed.
+- Every row gets a stated outcome: imported, error (with every reason), repeated in the file, already stored, or blank. Rows are numbered as a spreadsheet shows them, with the header as row 1.
+- Stored records are never overwritten. A row whose NCR ID already exists, or appeared earlier in the file, is skipped and reported with the fields that differ.
+- An import is stored completely or not at all, together with an entry recording the file name, its SHA-256, the time, the mapping used and the row counts.
+- Each imported record keeps its import, its row number and the row's original cells, so any figure can be traced back to the file. Do not drop or alter these.
+- CSV splitting lives in `src/core/csv.ts`; what a row means lives in `src/modules/quality/importRules.ts`. The server only wires them to storage.
+
 ## Network and AI
 
 - The server binds to `127.0.0.1` only and refuses requests under other host names and writes from other origins. Do not loosen this.

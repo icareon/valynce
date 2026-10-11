@@ -5,6 +5,7 @@ import type { NcrFields } from '../core/ncr.ts';
 import type { NcrStorage } from '../core/storage.ts';
 import { computeTotals } from '../modules/quality/totals.ts';
 import type { LoadSampleResponse, NcrListResponse, RemoveSampleResponse } from './contract.ts';
+import { registerImportRoutes } from './import.ts';
 
 export interface AppOptions {
   storage: NcrStorage;
@@ -84,6 +85,7 @@ export function createApp({ storage, loadSample, uiDir, trustedOrigins = [] }: A
       records,
       totals: computeTotals(records),
       sampleCount: records.filter((r) => r.origin === 'sample').length,
+      imports: storage.listImports(),
     };
     return c.json(body);
   });
@@ -97,6 +99,8 @@ export function createApp({ storage, loadSample, uiDir, trustedOrigins = [] }: A
     const body: RemoveSampleResponse = { deleted: storage.deleteByOrigin('sample') };
     return c.json(body);
   });
+
+  registerImportRoutes(app, storage);
 
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 

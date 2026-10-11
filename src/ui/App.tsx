@@ -7,15 +7,17 @@ import { listNcrs, loadSample, removeSample } from './api.ts';
 import { Icon } from './bits.tsx';
 import type { IconName } from './bits.tsx';
 import { plural } from './format.ts';
+import { ImportView } from './Import.tsx';
 import { CategoryChart, MetricCards } from './Overview.tsx';
 import { RecordDetail } from './RecordDetail.tsx';
 import { RecordsPanel } from './Records.tsx';
 
-type View = 'overview' | 'records';
+type View = 'overview' | 'records' | 'import';
 
 const VIEWS: { id: View; label: string; icon: IconName }[] = [
   { id: 'overview', label: 'Overview', icon: 'overview' },
   { id: 'records', label: 'Records', icon: 'records' },
+  { id: 'import', label: 'Import', icon: 'import' },
 ];
 
 function viewFromHash(): View {
@@ -127,7 +129,7 @@ export function App() {
   );
 
   return (
-    <div className={`app${selected !== null ? ' has-detail' : ''}`}>
+    <div className={`app${selected !== null && view !== 'import' ? ' has-detail' : ''}`}>
       <header className="appbar">
         <a className="wordmark" href="#/overview">
           <svg className="wordmark-mark" viewBox="0 0 18 18" fill="none" aria-hidden="true">
@@ -166,16 +168,23 @@ export function App() {
             </p>
           )}
 
-          {data !== null && records.length === 0 && (
+          {data !== null && view === 'import' && <ImportView imports={data.imports} onChanged={refresh} />}
+
+          {data !== null && view !== 'import' && records.length === 0 && (
             <div className="empty">
               <h1>No reports yet</h1>
               <p>
                 Valynce analyses non-conformance reports on your own computer, showing report counts, affected units
                 and recorded cost by defect category.
               </p>
-              <button type="button" className="btn btn-primary btn-lg" disabled={busy} onClick={() => void run(loadSample)}>
-                Load demo data
-              </button>
+              <div className="button-row">
+                <button type="button" className="btn btn-primary btn-lg" disabled={busy} onClick={() => void run(loadSample)}>
+                  Load demo data
+                </button>
+                <a className="btn btn-lg" href="#/import">
+                  Import a CSV file
+                </a>
+              </div>
               <p className="fine">Demo data is 24 synthetic reports. You can remove it at any time.</p>
             </div>
           )}
@@ -216,7 +225,13 @@ export function App() {
         </div>
       </main>
 
-      {selected !== null && <RecordDetail record={selected} onClose={closeRecord} />}
+      {selected !== null && view !== 'import' && (
+        <RecordDetail
+          record={selected}
+          batch={data?.imports.find((batch) => batch.id === selected.importBatchId)}
+          onClose={closeRecord}
+        />
+      )}
     </div>
   );
 }

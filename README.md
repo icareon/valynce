@@ -2,7 +2,7 @@
 
 Valynce is a local-first quality tool. It runs on your own machine, with a browser interface on top of a local backend, and applies rules and AI-assisted analysis to non-conformance reports (NCRs).
 
-> **Status:** Week 1, increment 1 of 6 complete. The app shows an overview, a category chart and a searchable records table over synthetic demo data. CSV import, Pareto analysis, AI summary, export and the `npx` launcher are not built yet.
+> **Status:** Week 1, increment 2 of 6. The app shows an overview, a category chart and a searchable records table, and imports CSV files with column mapping and row-by-row checks. Pareto analysis, AI summary, export and the `npx` launcher are not built yet.
 
 ## Try it
 
@@ -14,7 +14,7 @@ npm run build
 npm start
 ```
 
-Then open http://127.0.0.1:4310. A new database is empty; choose **Load demo data** to add 24 synthetic reports, and **Remove demo data** to take them out again. Press Ctrl+C in the terminal to stop the server.
+Then open http://127.0.0.1:4310. A new database is empty; choose **Load demo data** to add 24 synthetic reports, and **Remove demo data** to take them out again, or import your own CSV file. Press Ctrl+C in the terminal to stop the server.
 
 For development, `npm run dev` runs the backend with reload and the interface at http://127.0.0.1:5310, using a separate database in `./data`.
 
@@ -42,6 +42,19 @@ Each card says how many reports had a value, for example "Quantity recorded in 2
 - Amounts in different currencies are never added together; each currency gets its own total.
 - The chart "NCR reports by category" counts reports, including an "Uncategorized" bucket, so the bars always add up to the number of reports shown.
 - The cause on a report is shown as the *reported* cause. Valynce does not claim it is a verified root cause.
+
+## Importing a CSV file
+
+Open **Import**, choose a CSV file, check the column matching, and import. To try it, use the synthetic example in `fixtures/ncr-import-example.csv`: 18 rows, of which 11 import and 7 are deliberately wrong in different ways.
+
+- **Column mapping.** Valynce matches columns it recognises by header name. You can change any of them, and only the NCR ID is required.
+- **No guessing.** A date such as 03/04/2026 could be March or April, so you are asked how dates are written. An amount with a currency symbol, more than two decimals or a fraction of a unit is rejected, not adjusted.
+- **Row-by-row results.** Before anything is stored you see which rows will be imported and, for every other row, its row number and the reason.
+- **Duplicates.** A row whose NCR ID is already stored, or appeared earlier in the same file, is skipped and reported. Stored records are never overwritten, so importing the same file twice adds nothing.
+- **Traceability.** Each imported report keeps the file name, the row it came from and that row's original cells. Open a record to see them.
+- **Undo.** The Import view lists imported files; removing one removes exactly the reports it added.
+
+Files must be UTF-8 text with a header row, separated by commas, semicolons or tabs, up to 20 MB.
 
 ## Layout
 

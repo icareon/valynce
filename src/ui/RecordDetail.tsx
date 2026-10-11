@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import type { NcrRecord } from '../core/ncr.ts';
+import type { ImportBatch, NcrRecord } from '../core/ncr.ts';
 import { DemoTag, Icon, StatusBadge } from './bits.tsx';
 import { formatCost, formatWhole } from './format.ts';
 
@@ -27,7 +27,42 @@ function costText(record: NcrRecord): ReactNode {
   return `${formatCost(record.costCents, record.currency)} (${record.currency})`;
 }
 
-export function RecordDetail({ record, onClose }: { record: NcrRecord; onClose: () => void }) {
+function Source({ record, batch }: { record: NcrRecord; batch: ImportBatch | undefined }) {
+  if (record.origin === 'sample') {
+    return (
+      <p className="detail-text">
+        Synthetic demo data that ships with Valynce. It describes no real part, supplier or cost.
+      </p>
+    );
+  }
+  if (batch === undefined || record.sourceRow === null) {
+    return <p className="detail-text">The file this record came from was not recorded.</p>;
+  }
+  return (
+    <>
+      <dl className="facts">
+        <Fact label="Imported from">{batch.fileName}</Fact>
+        <Fact label="Row in file">{formatWhole(record.sourceRow)}</Fact>
+        <Fact label="Imported">{new Date(batch.importedAt).toLocaleString()}</Fact>
+      </dl>
+      {record.sourceValues !== null && (
+        <details className="source-row">
+          <summary>Original row, as written in the file</summary>
+          <dl className="facts">
+            {Object.entries(record.sourceValues).map(([column, value]) => (
+              <Fact key={column} label={column}>
+                {value === '' ? <span className="unknown-text">Empty</span> : value}
+              </Fact>
+            ))}
+          </dl>
+        </details>
+      )}
+    </>
+  );
+}
+
+export function RecordDetail(props: { record: NcrRecord; batch: ImportBatch | undefined; onClose: () => void }) {
+  const { record, batch, onClose } = props;
   const panel = useRef<HTMLElement>(null);
 
   // Move focus into the panel when it opens or switches record, so keyboard and
@@ -95,11 +130,7 @@ export function RecordDetail({ record, onClose }: { record: NcrRecord; onClose: 
 
         <section className="detail-section">
           <h3>Source</h3>
-          <p className="detail-text">
-            {record.origin === 'sample'
-              ? 'Synthetic demo data that ships with Valynce. It describes no real part, supplier or cost.'
-              : 'Imported record.'}
-          </p>
+          <Source record={record} batch={batch} />
         </section>
       </div>
     </aside>

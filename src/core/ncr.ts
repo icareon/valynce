@@ -28,6 +28,32 @@ export interface NcrRecord extends NcrFields {
   id: number;
   origin: NcrOrigin;
   createdAt: string;
+  /** The import that brought this record in. Null for demo data and for records stored before imports were tracked. */
+  importBatchId: number | null;
+  /** The row of the imported file this record came from. The header is row 1. */
+  sourceRow: number | null;
+  /** That row's cells exactly as they appeared in the file, by column name. */
+  sourceValues: Record<string, string> | null;
+}
+
+/** One imported file: what it was, when it came in and what happened to its rows. */
+export interface ImportBatch {
+  id: number;
+  fileName: string;
+  /** SHA-256 of the file's text, to tell whether two imports were the same file. */
+  fileSha256: string;
+  importedAt: string;
+  rowsTotal: number;
+  rowsImported: number;
+  rowsDuplicate: number;
+  rowsRejected: number;
+  rowsBlank: number;
+}
+
+export interface ImportRow {
+  fields: NcrFields;
+  sourceRow: number;
+  sourceValues: Record<string, string>;
 }
 
 export interface InsertResult {
