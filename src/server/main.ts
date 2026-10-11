@@ -24,13 +24,6 @@ const dataDir = resolveDataDir();
 mkdirSync(dataDir, { recursive: true });
 const storage = new NcrStorage(join(dataDir, 'valynce.db'));
 
-// A brand-new database opens with the synthetic sample records so there is
-// something to look at. This happens once; removing them is permanent.
-if (storage.getMeta('sample_seeded') === null) {
-  if (storage.count() === 0) storage.insertMany(loadSample(), 'sample');
-  storage.setMeta('sample_seeded', new Date().toISOString());
-}
-
 // Set by "npm run dev" only: the Vite dev server is a different origin from this backend.
 const devOrigin = process.env.VALYNCE_DEV_ORIGIN;
 

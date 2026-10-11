@@ -25,7 +25,7 @@ test('the sample fixture is valid, has unique NCR numbers and includes missing v
   assert.deepEqual(computeTotals(records), {
     recordCount: 24,
     quantityAffected: { sum: 1722, recorded: 21, missing: 3 },
-    costCents: { sum: 2015250, recorded: 20, missing: 4 },
+    cost: { groups: [{ currency: 'USD', sumCents: 2015250, recorded: 20 }], recorded: 20, missing: 4 },
   });
 });
 
@@ -43,7 +43,8 @@ test('the sample can be loaded, listed and removed through the API', async () =>
   const listed = (await (await app.request('/api/ncrs')).json()) as NcrListResponse;
   assert.equal(listed.records.length, 24);
   assert.equal(listed.sampleCount, 24);
-  assert.equal(listed.totals.costCents.missing, 4);
+  assert.equal(listed.totals.cost.missing, 4);
+  assert.ok(listed.records.every((r) => r.costCents === null || r.currency === 'USD'));
 
   const removed = await app.request('/api/sample', { method: 'DELETE' });
   assert.deepEqual(await removed.json(), { deleted: 24 });

@@ -14,8 +14,10 @@ export interface NcrFields {
   description: string | null;
   /** Units affected, a whole number. */
   quantityAffected: number | null;
-  /** Cost as recorded on the report, in hundredths of the dataset's single currency. */
+  /** Cost as recorded on the report, in hundredths of `currency`. */
   costCents: number | null;
+  /** ISO 4217 code for the cost. Null means the currency was not stated; it is never assumed. */
+  currency: string | null;
   status: string | null;
   disposition: string | null;
   /** The cause as written on the report. Valynce does not treat it as verified. */
@@ -56,6 +58,14 @@ export function isCalendarDate(value: string): boolean {
   const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+let knownCurrencies: Set<string> | undefined;
+
+/** True for an upper-case ISO 4217 code this runtime knows, such as USD or EUR. */
+export function isCurrencyCode(value: string): boolean {
+  knownCurrencies ??= new Set(Intl.supportedValuesOf('currency'));
+  return knownCurrencies.has(value);
 }
 
 /** Checks an untrusted object and returns clean NCR fields, or every problem found. */
@@ -105,6 +115,15 @@ export function parseNcrFields(input: unknown): ParseResult {
   const quantityAffected = wholeNumber('quantityAffected');
   const costCents = wholeNumber('costCents');
 
+  let currency: string | null = null;
+  if (!isMissing(raw.currency)) {
+    if (typeof raw.currency === 'string' && isCurrencyCode(raw.currency.trim().toUpperCase())) {
+      currency = raw.currency.trim().toUpperCase();
+    } else {
+      errors.push('currency must be an ISO 4217 code such as USD or EUR');
+    }
+  }
+
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, value: { ncrNumber, openedOn, ...text, quantityAffected, costCents } };
+  return { ok: true, value: { ncrNumber, openedOn, ...text, quantityAffected, costCents, currency } };
 }

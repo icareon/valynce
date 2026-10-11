@@ -1,9 +1,12 @@
+import { copyFileSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import type { InsertResult, NcrFields, NcrOrigin, NcrRecord } from './ncr.ts';
 
-const SCHEMA_VERSION = 1;
-
-const SCHEMA = `
+// One entry per schema version, applied in order. Never edit an entry that has
+// shipped; add a new one. Existing records must survive every migration.
+const MIGRATIONS: readonly string[] = [
+  // 1: records and settings.
+  `
   CREATE TABLE ncr (
     id INTEGER PRIMARY KEY,
     ncr_number TEXT NOT NULL UNIQUE,
@@ -24,7 +27,16 @@ const SCHEMA = `
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
   ) STRICT;
-`;
+  `,
+  // 2: currency. Costs stored before this have no stated currency and keep NULL.
+  // The only exception is Valynce's own synthetic demo records, which are defined as USD.
+  `
+  ALTER TABLE ncr ADD COLUMN currency TEXT;
+  UPDATE ncr SET currency = 'USD' WHERE origin = 'sample' AND cost_cents IS NOT NULL;
+  `,
+];
+
+export const SCHEMA_VERSION = MIGRATIONS.length;
 
 export class NcrStorage {
   readonly #db: DatabaseSync;
@@ -34,17 +46,23 @@ export class NcrStorage {
     this.#db = new DatabaseSync(dbPath);
     const row = this.#db.prepare('PRAGMA user_version').get();
     const version = Number(row?.user_version ?? 0);
-    if (version === 0) {
-      this.#transaction(() => {
-        this.#db.exec(SCHEMA);
-        this.#db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
-      });
-    } else if (version !== SCHEMA_VERSION) {
+    if (version > SCHEMA_VERSION) {
       this.#db.close();
       throw new Error(
-        `This database is schema version ${version}, but this Valynce expects ${SCHEMA_VERSION}. ` +
-          'It was not changed. Use a matching Valynce version.',
+        `This database is schema version ${version}, but this Valynce only knows up to ${SCHEMA_VERSION}. ` +
+          'It was not changed. Use a newer Valynce to open it.',
       );
+    }
+    if (version > 0 && version < SCHEMA_VERSION && dbPath !== ':memory:') {
+      // Keep an untouched copy of an existing database before changing its structure.
+      const backup = `${dbPath}.v${version}.bak`;
+      if (!existsSync(backup)) copyFileSync(dbPath, backup);
+    }
+    for (let next = version; next < SCHEMA_VERSION; next += 1) {
+      this.#transaction(() => {
+        this.#db.exec(MIGRATIONS[next]!);
+        this.#db.exec(`PRAGMA user_version = ${next + 1}`);
+      });
     }
   }
 
@@ -62,6 +80,7 @@ export class NcrStorage {
       description: row.description as string | null,
       quantityAffected: row.quantity_affected as number | null,
       costCents: row.cost_cents as number | null,
+      currency: row.currency as string | null,
       status: row.status as string | null,
       disposition: row.disposition as string | null,
       reportedCause: row.reported_cause as string | null,
@@ -86,8 +105,8 @@ export class NcrStorage {
     const insert = this.#db.prepare(`
       INSERT INTO ncr (
         ncr_number, opened_on, part_number, supplier, defect_category, description,
-        quantity_affected, cost_cents, status, disposition, reported_cause, origin, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        quantity_affected, cost_cents, currency, status, disposition, reported_cause, origin, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (ncr_number) DO NOTHING
     `);
     const createdAt = new Date().toISOString();
@@ -103,6 +122,7 @@ export class NcrStorage {
           r.description,
           r.quantityAffected,
           r.costCents,
+          r.currency,
           r.status,
           r.disposition,
           r.reportedCause,

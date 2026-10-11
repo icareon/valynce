@@ -1,0 +1,73 @@
+/* Shared design tokens. Components use these names and never raw values. */
+:root {
+  color-scheme: dark;
+
+  /* Surfaces, darkest to lightest */
+  --bg: #08090b;
+  --panel: #101216;
+  --panel-raised: #15181d;
+  --panel-hover: #191d23;
+  --border: #1f242b;
+  --border-strong: #2c333c;
+
+  /* Text */
+  --text: #f3f5f7;
+  --text-2: #aab2be;
+  --text-3: #7f8896;
+
+  /* Accent: teal. --accent is for text, outlines and controls; --accent-fill is for chart marks. */
+  --accent: #2dd4bf;
+  --accent-strong: #5eead4;
+  --accent-fill: #12a594;
+  --accent-wash: rgb(45 212 191 / 0.1);
+  --accent-line: rgb(45 212 191 / 0.35);
+  --on-accent: #04211d;
+
+  /* Status. Always shown with a text label, never colour alone. */
+  --status-open: #f2b84b;
+  --status-closed: #5ecf8f;
+  --status-neutral: #aab2be;
+  --danger: #f08a80;
+  --danger-wash: rgb(240 138 128 / 0.1);
+  --danger-line: rgb(240 138 128 / 0.35);
+
+  /* Type */
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-metric: 30px;
+
+  /* Space */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Shape */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --icon: 16px;
+  --control-h: 32px;
+
+  /* Motion */
+  --dur: 150ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Layout */
+  --appbar-h: 48px;
+  --rail-w: 208px;
+  --detail-w: 440px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur: 0ms;
+  }
+}

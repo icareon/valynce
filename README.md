@@ -2,7 +2,7 @@
 
 Valynce is a local-first quality tool. It runs on your own machine, with a browser interface on top of a local backend, and applies rules and AI-assisted analysis to non-conformance reports (NCRs).
 
-> **Status:** Week 1, increment 1 of 6. The app opens with synthetic NCR records and shows totals. CSV import, Pareto analysis, AI summary, export and the `npx` launcher are not built yet.
+> **Status:** Week 1, increment 1 of 6 complete. The app shows an overview, a category chart and a searchable records table over synthetic demo data. CSV import, Pareto analysis, AI summary, export and the `npx` launcher are not built yet.
 
 ## Try it
 
@@ -14,7 +14,7 @@ npm run build
 npm start
 ```
 
-Then open http://127.0.0.1:4310. A new database starts with 24 synthetic sample records, which you can remove from the banner at the top.
+Then open http://127.0.0.1:4310. A new database is empty; choose **Load demo data** to add 24 synthetic reports, and **Remove demo data** to take them out again. Press Ctrl+C in the terminal to stop the server.
 
 For development, `npm run dev` runs the backend with reload and the interface at http://127.0.0.1:5310, using a separate database in `./data`.
 
@@ -25,16 +25,23 @@ For development, `npm run dev` runs the backend with reload and the interface at
 | `npm run typecheck` | Type-checks everything |
 | `npm run build` | Builds into `dist` |
 | `npm start` | Serves the built app |
+| `npm run check:browser` | Drives the built app in headless Chrome and writes screenshots |
 
 ## What the numbers mean
 
 Valynce shows three different metrics and keeps them apart:
 
-- **NCR count**: the number of reports. Each counts once.
-- **Affected quantity**: units, summed over the reports that state a quantity.
-- **Recorded cost**: the cost written on the reports, summed over those that state one. One currency is assumed; nothing is converted.
+- **NCR reports**: the number of reports. Each counts once, however many units it covers.
+- **Affected units**: units, summed over the reports that state a quantity.
+- **Recorded cost**: the cost written on the reports, summed over those that state one. It is not an estimate of total cost of poor quality.
 
-A value that was not recorded is shown as "—". It is never treated as zero, and each total says how many reports had no value. The cause on a report is shown as the *reported* cause; Valynce does not claim it is verified.
+Each card says how many reports had a value, for example "Quantity recorded in 21 of 24 reports."
+
+- A value that was not recorded is shown as "—" or "Not recorded". It is never treated as zero.
+- Costs carry a currency. A cost with no stated currency is shown as "Currency unspecified" and is never assumed to be dollars.
+- Amounts in different currencies are never added together; each currency gets its own total.
+- The chart "NCR reports by category" counts reports, including an "Uncategorized" bucket, so the bars always add up to the number of reports shown.
+- The cause on a report is shown as the *reported* cause. Valynce does not claim it is a verified root cause.
 
 ## Layout
 

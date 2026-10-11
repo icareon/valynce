@@ -56,6 +56,7 @@ These terms keep their shop-floor meaning. Do not rename, merge or reinterpret t
 | Defect category | The classification written on the report. |
 | Disposition | What was decided for the affected material, such as scrap, rework, use as is or return to supplier. |
 | Reported cause | The cause as written on the report. It is not a verified root cause. |
+| Demo data | Valynce's own synthetic records, stored with origin `sample` and costed in USD. Always labelled as demo data wherever it appears. |
 | Pareto analysis | Categories ranked from largest to smallest by one stated metric, with cumulative share. A Pareto chart is always of one metric. |
 
 ## Analysis rules
@@ -63,7 +64,10 @@ These terms keep their shop-floor meaning. Do not rename, merge or reinterpret t
 - A value that was not recorded is `null` everywhere: storage, API and UI. Never replace it with zero, an empty string, an average or a guess. Totals state how many records had no value.
 - NCR count, affected quantity and recorded cost are three different metrics. Label each one wherever it is shown and never merge or rank them as if they were one.
 - `reportedCause` is what the report says. Do not present it, or anything a model produces, as a verified root cause.
-- Cost is stored as whole hundredths (`costCents`) so sums are exact. The dataset is assumed to use one currency; Valynce does not convert.
+- Cost is stored as whole hundredths (`costCents`) so sums are exact, with an ISO 4217 `currency` beside it.
+- A cost whose currency was not stated has `currency` null and is shown as "Currency unspecified". Never assign a currency to it, and never infer one from a symbol such as `$`.
+- Never add amounts in different currencies, or stated and unstated ones, together. Show one total per currency. Valynce does not convert.
+- Categories, statuses and other values are compared exactly as written. Do not merge, rename or normalise them.
 
 ## Network and AI
 
@@ -82,10 +86,11 @@ These terms keep their shop-floor meaning. Do not rename, merge or reinterpret t
 | `npm run dev` | Backend with reload plus the Vite dev server at `http://127.0.0.1:5310` |
 | `npm test` | Runs the tests in `tests` |
 | `npm run typecheck` | Type-checks UI, backend and tests |
+| `npm run check:browser` | Drives the built app in headless Chrome: clicks, keyboard, filters, restarts, layout and contrast. Needs `npm run build` first and a local Chrome |
 | `npm run build` | Builds the UI and backend into `dist` |
 | `npm start` | Serves the built app at `http://127.0.0.1:4310` |
 
-Run `npm run typecheck` and `npm test` before calling a change done.
+Run `npm run typecheck` and `npm test` before calling a change done. For a change to the interface, also run `npm run build && npm run check:browser`, look at the screenshots it writes, and add a check for the new behaviour.
 
 ## Git and releases
 
@@ -94,6 +99,15 @@ Run `npm run typecheck` and `npm test` before calling a change done.
 - Commit after each working increment, with the checks passing. One increment, one commit where practical.
 - Tag every working increment with an annotated tag that matches `version` in `package.json`, for example `v0.1.0-alpha.1`. A tag must be reproducible with `git checkout <tag> && npm ci && npm run build && npm test`.
 - Never move or delete a tag that has been pushed. Fix forward with a new version.
+
+## Interface
+
+- Colours, type sizes, spacing, radii, icon size and motion come from the tokens in `src/ui/tokens.css`. Do not hard-code them in components.
+- Sans-serif for interface text; monospace only for record IDs and technical values such as part numbers.
+- Every control works by keyboard and shows visible focus. Status is never carried by colour alone.
+- Show only controls that work. Do not add placeholders for features that are not built.
+- Do not show trends, percentage changes, scores or findings that are not computed from the stored records.
+- A new database starts empty. Existing databases are migrated in place after a backup copy is written beside them; a migration never drops or rewrites a user's records.
 
 ## Tests
 

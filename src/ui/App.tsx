@@ -1,92 +1,62 @@
-import { useCallback, useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
-import type { NcrRecord } from '../core/ncr.ts';
-import type { MetricTotal } from '../modules/quality/totals.ts';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { countByCategory } from '../modules/quality/categories.ts';
+import { filterRecords, NO_FILTER } from '../modules/quality/filter.ts';
+import type { RecordFilter } from '../modules/quality/filter.ts';
 import type { NcrListResponse } from '../server/contract.ts';
 import { listNcrs, loadSample, removeSample } from './api.ts';
+import { Icon } from './bits.tsx';
+import type { IconName } from './bits.tsx';
+import { plural } from './format.ts';
+import { CategoryChart, MetricCards } from './Overview.tsx';
+import { RecordDetail } from './RecordDetail.tsx';
+import { RecordsPanel } from './Records.tsx';
 
-const wholeNumber = new Intl.NumberFormat();
-const money = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const formatCost = (cents: number) => money.format(cents / 100);
+type View = 'overview' | 'records';
 
-function Missing() {
+const VIEWS: { id: View; label: string; icon: IconName }[] = [
+  { id: 'overview', label: 'Overview', icon: 'overview' },
+  { id: 'records', label: 'Records', icon: 'records' },
+];
+
+function viewFromHash(): View {
+  const id = window.location.hash.replace(/^#\/?/, '');
+  return VIEWS.find((v) => v.id === id)?.id ?? 'overview';
+}
+
+function useView(): View {
+  const [view, setView] = useState(viewFromHash);
+  useEffect(() => {
+    const onChange = () => setView(viewFromHash());
+    window.addEventListener('hashchange', onChange);
+    return () => window.removeEventListener('hashchange', onChange);
+  }, []);
+  return view;
+}
+
+function DemoNotice(props: { demo: number; total: number; busy: boolean; onRemove: () => void }) {
   return (
-    <span className="missing" title="Not recorded">
-      <span aria-hidden="true">—</span>
-      <span className="visually-hidden">Not recorded</span>
-    </span>
-  );
-}
-
-function Cell({ value }: { value: string | null }) {
-  return value === null ? <Missing /> : <>{value}</>;
-}
-
-function missingNote(total: MetricTotal, what: string): string {
-  if (total.recorded + total.missing === 0) return 'No records yet.';
-  if (total.missing === 0) return `All ${total.recorded} records state a ${what}.`;
-  const records = total.missing === 1 ? 'record has' : 'records have';
-  return `${total.missing} ${records} no ${what} and ${total.missing === 1 ? 'is' : 'are'} not in this sum.`;
-}
-
-function Tile({ label, value, note }: { label: string; value: ReactNode; note: string }) {
-  return (
-    <div className="tile">
-      <div className="tile-label">{label}</div>
-      <div className="tile-value">{value}</div>
-      <div className="tile-note">{note}</div>
-    </div>
-  );
-}
-
-function RecordTable({ records }: { records: NcrRecord[] }) {
-  return (
-    <div className="table-scroll">
-      <table>
-        <thead>
-          <tr>
-            <th>NCR</th>
-            <th>Opened</th>
-            <th>Part</th>
-            <th>Supplier</th>
-            <th>Defect category</th>
-            <th>Description</th>
-            <th className="num">Affected quantity</th>
-            <th className="num">Recorded cost</th>
-            <th>Status</th>
-            <th>Disposition</th>
-            <th>Reported cause</th>
-          </tr>
-        </thead>
-        <tbody>
-          {records.map((r) => (
-            <tr key={r.id}>
-              <th scope="row">
-                {r.ncrNumber}
-                {r.origin === 'sample' && <span className="tag">sample</span>}
-              </th>
-              <td className="nowrap"><Cell value={r.openedOn} /></td>
-              <td className="nowrap"><Cell value={r.partNumber} /></td>
-              <td className="nowrap"><Cell value={r.supplier} /></td>
-              <td><Cell value={r.defectCategory} /></td>
-              <td className="wide"><Cell value={r.description} /></td>
-              <td className="num">{r.quantityAffected === null ? <Missing /> : wholeNumber.format(r.quantityAffected)}</td>
-              <td className="num">{r.costCents === null ? <Missing /> : formatCost(r.costCents)}</td>
-              <td><Cell value={r.status} /></td>
-              <td><Cell value={r.disposition} /></td>
-              <td><Cell value={r.reportedCause} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="demo-notice">
+      <span>
+        <strong>Demo data</strong>{' '}
+        {props.demo === props.total
+          ? `${plural(props.demo, 'synthetic report')}`
+          : `${props.demo} of ${plural(props.total, 'report')} are synthetic`}
+      </span>
+      <button type="button" className="btn btn-sm" disabled={props.busy} onClick={props.onRemove}>
+        Remove demo data
+      </button>
     </div>
   );
 }
 
 export function App() {
+  const view = useView();
   const [data, setData] = useState<NcrListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState<RecordFilter>(NO_FILTER);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const opener = useRef<HTMLElement | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -105,78 +75,148 @@ export function App() {
     setBusy(true);
     try {
       await action();
+      await refresh();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
-      setBusy(false);
-      return;
     }
-    await refresh();
     setBusy(false);
   };
 
+  const records = useMemo(() => data?.records ?? [], [data]);
+  const visible = useMemo(() => filterRecords(records, filter), [records, filter]);
+  // The chart counts whatever search and status allow, so its bars always add
+  // up to a stated number and each bar equals the table count after clicking it.
+  const chartRecords = useMemo(() => filterRecords(records, { ...filter, category: undefined }), [records, filter]);
+  const categories = useMemo(() => countByCategory(chartRecords), [chartRecords]);
+  const selected = records.find((r) => r.id === selectedId) ?? null;
+
+  const openRecord = (id: number) => {
+    if (selectedId === null) opener.current = document.activeElement as HTMLElement | null;
+    setSelectedId(id);
+  };
+  const closeRecord = () => {
+    setSelectedId(null);
+    // Return focus to where the user was, if that element is still on the page.
+    if (opener.current?.isConnected) opener.current.focus();
+    opener.current = null;
+  };
+
+  const demoNotice = data !== null && data.sampleCount > 0 && (
+    <DemoNotice
+      demo={data.sampleCount}
+      total={records.length}
+      busy={busy}
+      onRemove={() => {
+        setSelectedId(null);
+        setFilter(NO_FILTER);
+        void run(removeSample);
+      }}
+    />
+  );
+
+  const recordsPanel = (heading?: string) => (
+    <RecordsPanel
+      records={records}
+      visible={visible}
+      filter={filter}
+      onFilter={setFilter}
+      selectedId={selectedId}
+      onSelect={openRecord}
+      heading={heading}
+    />
+  );
+
   return (
-    <div className="page">
-      <header className="masthead">
-        <p className="eyebrow">NCR analyzer · Runs locally</p>
-        <h1>Valynce</h1>
-        <p>Records are stored on this computer and are not sent anywhere.</p>
-      </header>
-      <div className="divider" />
-
-      {error !== null && (
-        <p className="banner banner-error" role="alert">
-          Could not reach the local Valynce backend: {error}
+    <div className={`app${selected !== null ? ' has-detail' : ''}`}>
+      <header className="appbar">
+        <a className="wordmark" href="#/overview">
+          <svg className="wordmark-mark" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+            <path d="M2 3l7 12 7-12" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          Valynce
+        </a>
+        <p className="crumbs">
+          <span>Quality</span>
+          <span className="sep" aria-hidden="true">
+            /
+          </span>
+          <span className="here">NCR Analyzer</span>
         </p>
-      )}
+        <span className="spacer" />
+        <span className="local" title="Valynce is running on this computer. Records stay in a local database.">
+          <span className="local-dot" aria-hidden="true" />
+          Local
+        </span>
+      </header>
 
-      {data !== null && data.sampleCount > 0 && (
-        <div className="banner">
-          <p>
-            <strong>
-              {data.sampleCount} of {data.totals.recordCount} records are synthetic samples.
-            </strong>{' '}
-            They were invented for demonstration and describe no real part, supplier or cost.
-          </p>
-          <button type="button" disabled={busy} onClick={() => void run(removeSample)}>
-            Remove sample records
-          </button>
-        </div>
-      )}
+      <nav className="rail" aria-label="Views">
+        {VIEWS.map((v) => (
+          <a key={v.id} href={`#/${v.id}`} aria-current={view === v.id ? 'page' : undefined} title={v.label}>
+            <Icon name={v.icon} />
+            <span>{v.label}</span>
+          </a>
+        ))}
+      </nav>
 
-      {data !== null && (
-        <>
-          <section className="tiles" aria-label="Totals">
-            <Tile
-              label="NCR count"
-              value={wholeNumber.format(data.totals.recordCount)}
-              note="Number of reports. Each counts once, whatever its quantity or cost."
-            />
-            <Tile
-              label="Affected quantity"
-              value={
-                data.totals.quantityAffected.recorded === 0 ? <Missing /> : wholeNumber.format(data.totals.quantityAffected.sum)
-              }
-              note={`Units, summed. ${missingNote(data.totals.quantityAffected, 'quantity')}`}
-            />
-            <Tile
-              label="Recorded cost"
-              value={data.totals.costCents.recorded === 0 ? <Missing /> : formatCost(data.totals.costCents.sum)}
-              note={`As written on the reports, summed. ${missingNote(data.totals.costCents, 'cost')}`}
-            />
-          </section>
-
-          {data.records.length === 0 ? (
-            <div className="empty">
-              <p>No records yet.</p>
-              <button type="button" disabled={busy} onClick={() => void run(loadSample)}>
-                Load synthetic sample records
-              </button>
-            </div>
-          ) : (
-            <RecordTable records={data.records} />
+      <main className="main">
+        <div className="view">
+          {error !== null && (
+            <p className="alert" role="alert">
+              Could not reach the local Valynce backend: {error}
+            </p>
           )}
-        </>
-      )}
+
+          {data !== null && records.length === 0 && (
+            <div className="empty">
+              <h1>No reports yet</h1>
+              <p>
+                Valynce analyses non-conformance reports on your own computer, showing report counts, affected units
+                and recorded cost by defect category.
+              </p>
+              <button type="button" className="btn btn-primary btn-lg" disabled={busy} onClick={() => void run(loadSample)}>
+                Load demo data
+              </button>
+              <p className="fine">Demo data is 24 synthetic reports. You can remove it at any time.</p>
+            </div>
+          )}
+
+          {data !== null && records.length > 0 && view === 'overview' && (
+            <>
+              <div className="page-head">
+                <div>
+                  <h1>Quality overview</h1>
+                  <p>What the stored non-conformance reports add up to.</p>
+                </div>
+                {demoNotice}
+              </div>
+              <MetricCards totals={data.totals} categorized={records.filter((r) => r.defectCategory !== null).length} />
+              <CategoryChart
+                categories={categories}
+                total={chartRecords.length}
+                stored={records.length}
+                selected={filter.category}
+                onSelect={(category) => setFilter({ ...filter, category })}
+              />
+              {recordsPanel('Records')}
+            </>
+          )}
+
+          {data !== null && records.length > 0 && view === 'records' && (
+            <>
+              <div className="page-head">
+                <div>
+                  <h1>Records</h1>
+                  <p>Every stored report. Select a row to see all of its fields.</p>
+                </div>
+                {demoNotice}
+              </div>
+              {recordsPanel()}
+            </>
+          )}
+        </div>
+      </main>
+
+      {selected !== null && <RecordDetail record={selected} onClose={closeRecord} />}
     </div>
   );
 }
