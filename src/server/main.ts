@@ -51,6 +51,9 @@ function shutdown(): void {
     storage.close();
     process.exit(0);
   });
+  // Browsers keep spare connections open. close() waits for them, so without
+  // this Ctrl+C stops new requests but the process never exits.
+  if ('closeAllConnections' in server) server.closeAllConnections();
 }
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
