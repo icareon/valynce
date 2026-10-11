@@ -3,9 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0c1017" />
+    <meta name="color-scheme" content="light dark" />
     <title>Valynce</title>
+    <script>
+      // Runs before the page paints, so the saved theme is there from the first frame.
+      // Light is the default for a first visit.
+      (function () {
+        var theme = 'light';
+        try {
+          if (localStorage.getItem('valynce-theme') === 'dark') theme = 'dark';
+        } catch (e) {}
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

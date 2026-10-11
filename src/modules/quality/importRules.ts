@@ -4,7 +4,7 @@
 // stays "not recorded".
 import { columnLabels } from '../../core/csv.ts';
 import type { CsvTable } from '../../core/csv.ts';
-import { isCalendarDate, isCurrencyCode } from '../../core/ncr.ts';
+import { isCalendarDate, isCurrencyCode, readQuantityUnit } from '../../core/ncr.ts';
 import type { NcrFields } from '../../core/ncr.ts';
 
 export const IMPORT_FIELDS = [
@@ -15,6 +15,7 @@ export const IMPORT_FIELDS = [
   'defectCategory',
   'description',
   'quantityAffected',
+  'quantityUnit',
   'cost',
   'currency',
   'status',
@@ -28,14 +29,18 @@ export type ImportField = (typeof IMPORT_FIELDS)[number];
 export type ImportMapping = Record<ImportField, number | null>;
 
 export type DateFormat = 'YMD' | 'DMY' | 'MDY';
-export type DecimalSeparator = '.' | ',';
+/** 'point' reads 1,234.56 and 'comma' reads 1.234,56 as one thousand two hundred thirty-four and 56 hundredths. */
+export type NumberFormat = 'point' | 'comma';
 
 export interface ImportOptions {
   /** How dates are written in the file. Null means it could not be told and must be chosen. */
   dateFormat: DateFormat | null;
-  decimalSeparator: DecimalSeparator;
+  /** How numbers are written. Null means the file does not settle it; it must be chosen if any number has a separator. */
+  numberFormat: NumberFormat | null;
   /** Currency for costs in rows that state none. Null leaves them unspecified. */
   defaultCurrency: string | null;
+  /** Unit for quantities in rows that state none. Null means they are counts of pieces. */
+  defaultQuantityUnit: string | null;
 }
 
 export const FIELD_LABELS: Record<ImportField, string> = {
@@ -46,6 +51,7 @@ export const FIELD_LABELS: Record<ImportField, string> = {
   defectCategory: 'Defect category',
   description: 'Description',
   quantityAffected: 'Affected quantity',
+  quantityUnit: 'Quantity unit',
   cost: 'Recorded cost',
   currency: 'Currency',
   status: 'Status',
@@ -62,7 +68,8 @@ const SYNONYMS: Record<ImportField, readonly string[]> = {
   supplier: ['supplier', 'suppliername', 'vendor', 'vendorname'],
   defectCategory: ['category', 'defectcategory', 'defecttype', 'defect', 'defectcode', 'failuremode', 'type', 'nonconformancetype'],
   description: ['description', 'desc', 'issue', 'problem', 'details', 'nonconformance', 'defectdescription'],
-  quantityAffected: ['qty', 'quantity', 'quantityaffected', 'affectedquantity', 'affectedqty', 'qtyaffected', 'units', 'nonconformingqty', 'qtyrejected', 'rejectedqty'],
+  quantityAffected: ['qty', 'quantity', 'quantityaffected', 'affectedquantity', 'affectedqty', 'qtyaffected', 'nonconformingqty', 'qtyrejected', 'rejectedqty'],
+  quantityUnit: ['unit', 'units', 'uom', 'unitofmeasure', 'qtyunit', 'quantityunit', 'qtyuom'],
   cost: ['cost', 'recordedcost', 'totalcost', 'amount', 'value', 'costofnonconformance'],
   currency: ['currency', 'cur', 'ccy', 'currencycode'],
   status: ['status', 'state'],
@@ -118,11 +125,49 @@ export function detectDateFormat(values: readonly string[]): DateFormat | null {
   return null;
 }
 
-export function detectDecimalSeparator(values: readonly string[]): DecimalSeparator {
-  const present = values.map((v) => v.trim()).filter((v) => v !== '');
-  const commaDecimals = present.some((v) => /,\d{1,2}$/.test(v));
-  const dotDecimals = present.some((v) => /\.\d{1,2}$/.test(v));
-  return commaDecimals && !dotDecimals ? ',' : '.';
+export interface NumberFormatEvidence {
+  /** The format the values prove, or null when they prove nothing or contradict each other. */
+  format: NumberFormat | null;
+  /** True when at least one value contains a point or comma, so the format changes what is read. */
+  needed: boolean;
+}
+
+const tidy = (raw: string) => raw.trim().replace(/[  ]/g, ' ');
+
+/**
+ * Works out how numbers are written, but only from values that can be read one
+ * way. "1,234.56" proves the point format and "12,5" proves the comma format.
+ * "1,234" proves nothing: it is 1234 in one format and 1.234 in the other, so
+ * on its own it leaves the format undecided.
+ */
+export function detectNumberFormat(values: readonly string[]): NumberFormatEvidence {
+  let needed = false;
+  const proven = new Set<NumberFormat>();
+  for (const raw of values) {
+    const value = tidy(raw);
+    if (!/^[\d., ]+$/.test(value)) continue;
+    const lastPoint = value.lastIndexOf('.');
+    const lastComma = value.lastIndexOf(',');
+    if (lastPoint === -1 && lastComma === -1) continue;
+    needed = true;
+    if (lastPoint !== -1 && lastComma !== -1) {
+      // With both present, the one written last is the decimal separator.
+      proven.add(lastPoint > lastComma ? 'point' : 'comma');
+      continue;
+    }
+    const separator = lastPoint !== -1 ? '.' : ',';
+    const asDecimal: NumberFormat = separator === '.' ? 'point' : 'comma';
+    const asThousands: NumberFormat = separator === '.' ? 'comma' : 'point';
+    const parts = value.split(separator);
+    if (parts.length > 2) {
+      proven.add(asThousands);
+    } else {
+      const [before, after] = [parts[0]!.replace(/ /g, ''), parts[1]!];
+      const couldBeThousands = after.length === 3 && before.length >= 1 && before.length <= 3;
+      if (!couldBeThousands) proven.add(asDecimal);
+    }
+  }
+  return { format: proven.size === 1 ? [...proven][0]! : null, needed };
 }
 
 type Parsed<T> = { ok: true; value: T } | { ok: false; problem: string };
@@ -142,40 +187,81 @@ function parseDate(raw: string, format: DateFormat): Parsed<string> {
   return { ok: true, value: iso };
 }
 
-function parseQuantity(raw: string): Parsed<number> {
-  if (/^\d+$/.test(raw) && Number.isSafeInteger(Number(raw))) return { ok: true, value: Number(raw) };
-  return {
-    ok: false,
-    problem: `Affected quantity "${raw}" is not a whole number of units written with digits only.`,
-  };
-}
+const FORMAT_EXAMPLE: Record<NumberFormat, string> = { point: '1,234.56', comma: '1.234,56' };
 
-/** Reads an amount into hundredths exactly. It never rounds and never strips a currency symbol. */
-function parseCost(raw: string, separator: DecimalSeparator): Parsed<number> {
-  const text = raw.replace(/[  ]/g, ' ');
+/**
+ * Splits a written number into its whole digits and its decimal digits, exactly
+ * as the chosen format says. Nothing is rounded and no symbol is stripped.
+ */
+function readNumber(label: string, raw: string, format: NumberFormat | null): Parsed<{ whole: string; fraction: string }> {
+  const text = tidy(raw);
   const symbol = /[^\d.,\s-]/.exec(text)?.[0];
   if (symbol !== undefined) {
-    return {
-      ok: false,
-      problem: `Recorded cost "${raw}" contains "${symbol}". Give the amount alone and state the currency in a currency column or the import settings.`,
-    };
+    return { ok: false, problem: `${label} "${raw}" contains "${symbol}". Give the number alone.` };
   }
-  const [thousands, decimal] = separator === '.' ? ['[, ]', String.raw`\.`] : ['[. ]', ','];
-  const grouped = new RegExp(String.raw`^(\d{1,3}(?:${thousands}\d{3})+|\d+)(?:${decimal}(\d+))?$`);
-  const match = grouped.exec(text);
+  if (/^\d+$/.test(text)) return { ok: true, value: { whole: text, fraction: '' } };
+  if (format === null) {
+    return { ok: false, problem: `${label} "${raw}" cannot be read until the number format is chosen.` };
+  }
+  const [thousands, decimal] = format === 'point' ? ['[, ]', String.raw`\.`] : ['[. ]', ','];
+  const match = new RegExp(String.raw`^(\d{1,3}(?:${thousands}\d{3})+|\d+)(?:${decimal}(\d+))?$`).exec(text);
   if (!match) {
     return {
       ok: false,
-      problem: `Recorded cost "${raw}" is not a plain amount that is zero or more, with "${separator}" as the decimal separator.`,
+      problem: `${label} "${raw}" is not a number that is zero or more, written like ${FORMAT_EXAMPLE[format]}.`,
     };
   }
-  const fraction = match[2] ?? '';
+  return { ok: true, value: { whole: match[1]!.replace(/\D/g, ''), fraction: match[2] ?? '' } };
+}
+
+/** Reads an amount into hundredths exactly. */
+function parseCost(raw: string, format: NumberFormat | null): Parsed<number> {
+  const read = readNumber('Recorded cost', raw, format);
+  if (!read.ok) {
+    return /contains "/.test(read.problem)
+      ? { ok: false, problem: `${read.problem.replace(' Give the number alone.', '')} Give the amount alone and state the currency in a currency column or the import settings.` }
+      : read;
+  }
+  const { whole, fraction } = read.value;
   if (fraction.length > 2) {
     return { ok: false, problem: `Recorded cost "${raw}" has more than two decimal places. Valynce does not round.` };
   }
-  const cents = Number(match[1]!.replace(/\D/g, '')) * 100 + Number(fraction.padEnd(2, '0'));
+  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
   if (!Number.isSafeInteger(cents)) return { ok: false, problem: `Recorded cost "${raw}" is too large.` };
   return { ok: true, value: cents };
+}
+
+/**
+ * Reads a quantity. A count of pieces must be whole. A fraction is accepted
+ * only when the row's unit is a recognised unit of measure, such as kg.
+ */
+function parseQuantity(raw: string, format: NumberFormat | null, fractional: boolean, unit: string | null): Parsed<number> {
+  const read = readNumber('Affected quantity', raw, format);
+  if (!read.ok) return read;
+  const fraction = read.value.fraction.replace(/0+$/, '');
+  if (fraction !== '' && !fractional) {
+    return {
+      ok: false,
+      problem:
+        unit === null
+          ? `Affected quantity "${raw}" is not a whole number. Pieces are counted whole; a fraction needs a unit of measure such as kg.`
+          : `Affected quantity "${raw}" is not a whole number, and "${unit}" is not a recognised unit of measure, so a fraction cannot be accepted.`,
+    };
+  }
+  if (fraction.length > 3) {
+    return { ok: false, problem: `Affected quantity "${raw}" has more than three decimal places. Valynce does not round.` };
+  }
+  const milli = Number(read.value.whole) * 1000 + Number(fraction.padEnd(3, '0'));
+  if (!Number.isSafeInteger(milli)) return { ok: false, problem: `Affected quantity "${raw}" is too large.` };
+  return { ok: true, value: milli / 1000 };
+}
+
+export interface NumberExample {
+  field: 'quantityAffected' | 'cost';
+  /** The value as written in the file. */
+  raw: string;
+  /** How it will be read, in plain digits with a point, or null when it cannot be read. */
+  read: string | null;
 }
 
 export type RowStatus = 'ready' | 'error' | 'duplicate-in-file' | 'duplicate-stored' | 'blank';
@@ -218,6 +304,7 @@ const COMPARED: readonly (keyof NcrFields)[] = [
   'defectCategory',
   'description',
   'quantityAffected',
+  'quantityUnit',
   'costCents',
   'currency',
   'status',
@@ -232,6 +319,7 @@ const COMPARED_LABELS: Record<string, string> = {
   defectCategory: 'defect category',
   description: 'description',
   quantityAffected: 'affected quantity',
+  quantityUnit: 'quantity unit',
   costCents: 'recorded cost',
   currency: 'currency',
   status: 'status',
@@ -241,6 +329,48 @@ const COMPARED_LABELS: Record<string, string> = {
 
 function differences(a: NcrFields, b: NcrFields): string[] {
   return COMPARED.filter((field) => a[field] !== b[field]).map((field) => COMPARED_LABELS[field]!);
+}
+
+/** Every non-empty value in the columns mapped to a number. */
+export function numericValues(table: CsvTable, mapping: ImportMapping): string[] {
+  const values: string[] = [];
+  for (const field of ['quantityAffected', 'cost'] as const) {
+    const index = mapping[field];
+    if (index === null) continue;
+    for (const cells of table.rows) {
+      const value = (cells[index] ?? '').trim();
+      if (value !== '') values.push(value);
+    }
+  }
+  return values;
+}
+
+/**
+ * A few numbers from the file with how each will be read, so the reading can
+ * be checked by eye before anything is imported. Values that contain a
+ * separator come first, since they are the ones the format changes.
+ */
+export function numberExamples(table: CsvTable, mapping: ImportMapping, options: ImportOptions, limit = 4): NumberExample[] {
+  const examples: NumberExample[] = [];
+  for (const field of ['quantityAffected', 'cost'] as const) {
+    const index = mapping[field];
+    if (index === null) continue;
+    const distinct = [...new Set(table.rows.map((cells) => (cells[index] ?? '').trim()).filter((v) => v !== ''))];
+    const chosen = [...distinct.filter((v) => /[.,]/.test(v)), ...distinct.filter((v) => !/[.,]/.test(v))].slice(0, limit);
+    for (const raw of chosen) {
+      let read: string | null = null;
+      if (field === 'cost') {
+        const parsed = parseCost(raw, options.numberFormat);
+        if (parsed.ok) read = (parsed.value / 100).toFixed(2);
+      } else {
+        // Shown as a number only; whether a fraction is allowed depends on each row's unit.
+        const parsed = parseQuantity(raw, options.numberFormat, true, null);
+        if (parsed.ok) read = String(parsed.value);
+      }
+      examples.push({ field, raw, read });
+    }
+  }
+  return examples;
 }
 
 /**
@@ -266,6 +396,13 @@ export function planImport(
   const hasDates = mapping.openedOn !== null && table.rows.some((cells) => cellOf(cells, 'openedOn') !== '');
   if (hasDates && options.dateFormat === null) {
     blocking.push('The dates in this file could be read more than one way. Choose how they are written.');
+  }
+  const numbers = numericValues(table, mapping);
+  if (options.numberFormat === null && detectNumberFormat(numbers).needed) {
+    const example = numbers.map(tidy).find((value) => /[.,]/.test(value));
+    blocking.push(
+      `Numbers in this file such as "${example}" could be read more than one way. Choose how numbers are written.`,
+    );
   }
 
   const rows: PlannedRow[] = [];
@@ -305,17 +442,24 @@ export function planImport(
     }
 
     let quantityAffected: number | null = null;
+    let quantityUnit: string | null = null;
     const rawQuantity = cellOf(cells, 'quantityAffected');
     if (rawQuantity !== '') {
-      const parsed = parseQuantity(rawQuantity);
-      if (parsed.ok) quantityAffected = parsed.value;
-      else problems.push(parsed.problem);
+      // A unit only means something beside a quantity.
+      const stated = readQuantityUnit(cellOf(cells, 'quantityUnit') || options.defaultQuantityUnit);
+      const parsed = parseQuantity(rawQuantity, options.numberFormat, stated.fractional, stated.unit);
+      if (parsed.ok) {
+        quantityAffected = parsed.value;
+        quantityUnit = stated.unit;
+      } else {
+        problems.push(parsed.problem);
+      }
     }
 
     let costCents: number | null = null;
     const rawCost = cellOf(cells, 'cost');
     if (rawCost !== '') {
-      const parsed = parseCost(rawCost, options.decimalSeparator);
+      const parsed = parseCost(rawCost, options.numberFormat);
       if (parsed.ok) costCents = parsed.value;
       else problems.push(parsed.problem);
     }
@@ -343,6 +487,7 @@ export function planImport(
       defectCategory: text('defectCategory'),
       description: text('description'),
       quantityAffected,
+      quantityUnit,
       costCents,
       currency,
       status: text('status'),

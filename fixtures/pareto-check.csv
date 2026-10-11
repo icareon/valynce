@@ -1,0 +1,11 @@
+NCR No,Date Opened,Part No,Defect Type,Issue,Qty,Unit,Cost,Currency,State
+PC-001,2026-09-01,PC-100,Labeling,Label missing lot number,5,,30.00,USD,Closed
+PC-002,2026-09-02,PC-100,Labeling,Label missing lot number,5,,30.00,USD,Closed
+PC-003,2026-09-03,PC-101,Labeling,Wrong revision on label,5,,40.00,USD,Closed
+PC-004,2026-09-04,PC-101,Labeling,Wrong revision on label,5,,,,Open
+PC-005,2026-09-05,PC-200,Dimensional,Hole diameter above limit,20,,10.00,USD,Closed
+PC-006,2026-09-08,PC-200,Dimensional,Hole diameter above limit,30,,15.00,USD,Closed
+PC-007,2026-09-09,PC-201,Dimensional,Length below limit,50,,25.00,USD,Open
+PC-008,2026-09-10,PC-300,Material,Wrong alloy delivered,80,pcs,850.00,USD,Closed
+PC-009,2026-09-11,PC-301,Material,Resin batch out of specification,2.5,kg,300.00,EUR,Open
+PC-010,2026-09-12,PC-400,,Complaint received with no details,,,,,Open

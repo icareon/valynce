@@ -35,12 +35,31 @@ dd {
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
 .mono {
   font-family: var(--font-mono);
+}
+
+/* Small technical labels: navigation, column heads, chart labels, metadata. */
+.rail a,
+.crumbs,
+.local,
+.metric-label,
+thead th,
+.detail-eyebrow,
+.detail-section h3,
+.pareto-eyebrow,
+.pareto-colhead,
+.bar-label,
+.seg button,
+.tag {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .visually-hidden {
@@ -71,9 +90,9 @@ dd {
   grid-area: bar;
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
   min-width: 0;
-  padding: 0 var(--space-4);
+  padding: 0 var(--space-3) 0 var(--space-4);
   background: var(--panel);
   border-bottom: 1px solid var(--border);
 }
@@ -100,15 +119,15 @@ dd {
   display: flex;
   gap: var(--space-2);
   min-width: 0;
+  margin-left: var(--space-1);
   padding-left: var(--space-4);
-  color: var(--text-2);
-  font-size: var(--text-sm);
+  color: var(--text-3);
   white-space: nowrap;
   border-left: 1px solid var(--border);
 }
 
-.crumbs .sep {
-  color: var(--text-3);
+.theme-toggle {
+  min-width: 78px;
 }
 
 .crumbs .here {
@@ -124,17 +143,16 @@ dd {
   align-items: center;
   gap: 6px;
   height: 24px;
-  padding: 0 10px;
+  padding: 0 var(--space-2);
   color: var(--text-2);
-  font-size: var(--text-xs);
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
 }
 
 .local-dot {
   width: 6px;
   height: 6px;
-  background: var(--accent);
+  background: var(--status-closed);
   border-radius: 50%;
 }
 
@@ -149,14 +167,13 @@ dd {
 }
 
 .rail a {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  height: var(--control-h);
+  height: 32px;
   padding: 0 var(--space-3);
   color: var(--text-2);
-  font-size: var(--text-sm);
-  font-weight: 500;
   text-decoration: none;
   border-radius: var(--radius-md);
   transition:
@@ -171,11 +188,18 @@ dd {
 
 .rail a[aria-current='page'] {
   color: var(--text);
-  background: var(--panel-raised);
+  background: var(--panel-hover);
 }
 
-.rail a[aria-current='page'] .icon {
-  color: var(--accent);
+/* The active view carries a short orange marker rather than orange text. */
+.rail a[aria-current='page']::before {
+  content: '';
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 0;
+  width: 2px;
+  background: var(--accent);
 }
 
 .main {
@@ -189,7 +213,7 @@ dd {
 .view {
   max-width: 1320px;
   margin: 0 auto;
-  padding: var(--space-5) var(--space-5) var(--space-6);
+  padding: var(--space-6) var(--space-6) var(--space-7);
 }
 
 .app.has-detail .view {
@@ -236,7 +260,7 @@ dd {
   font-size: var(--text-sm);
   font-weight: 500;
   white-space: nowrap;
-  background: var(--panel-raised);
+  background: var(--panel);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -264,18 +288,18 @@ dd {
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-strong);
-  border-color: var(--accent-strong);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
 }
 
 .btn-lg {
-  height: 40px;
+  height: 38px;
   padding: 0 var(--space-5);
   font-size: var(--text-md);
 }
 
 .btn-sm {
-  height: 26px;
+  height: 24px;
   padding: 0 var(--space-2);
   font-size: var(--text-xs);
 }
@@ -289,6 +313,15 @@ dd {
 .btn-quiet:hover:not(:disabled) {
   color: var(--text);
   border-color: transparent;
+}
+
+a.btn {
+  text-decoration: none;
+}
+
+.btn-danger {
+  color: var(--danger);
+  border-color: var(--danger-line);
 }
 
 .icon-btn {
@@ -333,9 +366,53 @@ dd {
   color: var(--text-3);
 }
 
+.field:disabled {
+  opacity: 0.5;
+}
+
 select.field {
   max-width: 100%;
   padding-right: var(--space-2);
+}
+
+/* A row of mutually exclusive choices. The chosen one is marked in orange. */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+}
+
+.seg button {
+  height: calc(var(--control-h) - 2px);
+  padding: 0 var(--space-3);
+  color: var(--text-2);
+  white-space: nowrap;
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--border-strong);
+  cursor: pointer;
+  transition:
+    background-color var(--dur) var(--ease),
+    color var(--dur) var(--ease);
+}
+
+.seg button:last-child {
+  border-right: 0;
+}
+
+.seg button:hover {
+  color: var(--text);
+  background: var(--panel-hover);
+}
+
+.seg button:focus-visible {
+  outline-offset: -2px;
+}
+
+.seg button[aria-pressed='true'] {
+  color: var(--text);
+  background: var(--accent-wash);
+  box-shadow: inset 0 -2px 0 var(--accent);
 }
 
 .search {
@@ -346,7 +423,7 @@ select.field {
 
 .search .icon {
   position: absolute;
-  top: 8px;
+  top: 7px;
   left: 10px;
   color: var(--text-3);
   pointer-events: none;
@@ -355,6 +432,18 @@ select.field {
 .search .field {
   width: 100%;
   padding-left: 34px;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.hint {
+  color: var(--text-3);
+  font-size: var(--text-sm);
 }
 
 /* ---------- Notices ---------- */
@@ -367,13 +456,13 @@ select.field {
   padding: 2px 3px 2px var(--space-3);
   color: var(--text-2);
   font-size: var(--text-sm);
-  background: var(--accent-wash);
-  border: 1px solid var(--accent-line);
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-md);
 }
 
 .demo-notice strong {
-  color: var(--accent);
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -389,14 +478,11 @@ select.field {
 
 .tag {
   display: inline-block;
-  padding: 0 6px;
-  color: var(--accent);
-  font-family: var(--font-sans);
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 18px;
+  padding: 0 5px;
+  color: var(--text-2);
+  line-height: 16px;
   vertical-align: 1px;
-  border: 1px solid var(--accent-line);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
 }
 
@@ -409,19 +495,23 @@ select.field {
   font-style: italic;
 }
 
-/* ---------- Metric cards ---------- */
-
-.metrics {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--space-4);
-  margin-bottom: var(--space-4);
-}
+/* ---------- Panels and metric cards ---------- */
 
 .card {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
+}
+
+.pad {
+  padding: var(--space-4);
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
 }
 
 .metric {
@@ -433,13 +523,12 @@ select.field {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  margin: -3px -4px 0 0;
+  margin: -4px -6px 0 0;
 }
 
 .metric-label {
-  color: var(--text-2);
-  font-size: var(--text-sm);
-  font-weight: 500;
+  color: var(--text-3);
+  font-weight: 400;
 }
 
 .metric-value {
@@ -454,32 +543,31 @@ select.field {
 .metric-value .tag {
   margin-left: var(--space-2);
   vertical-align: 6px;
-  letter-spacing: 0;
 }
 
-.metric-costs {
+.metric-groups {
   display: grid;
   gap: 2px;
-  margin-top: var(--space-2);
+  margin: var(--space-2) 0 0;
   padding: 0;
   list-style: none;
 }
 
-.metric-costs li {
+.metric-groups li {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-2);
 }
 
-.metric-costs .amount {
+.metric-groups .amount {
   font-size: var(--text-xl);
   font-weight: 600;
   letter-spacing: -0.015em;
   font-variant-numeric: tabular-nums;
 }
 
-.metric-costs .of {
+.metric-groups .of {
   color: var(--text-3);
   font-size: var(--text-xs);
 }
@@ -490,7 +578,8 @@ select.field {
   font-size: var(--text-sm);
 }
 
-.metric-help {
+.metric-help,
+.pareto-help {
   margin-top: var(--space-3);
   padding-top: var(--space-3);
   color: var(--text-2);
@@ -498,56 +587,133 @@ select.field {
   border-top: 1px solid var(--border);
 }
 
-/* ---------- Category chart ---------- */
+/* ---------- Pareto ---------- */
 
-.chart {
-  margin-bottom: var(--space-5);
+.pareto {
+  /* Column widths are shared by the header, the rows and the overlay that draws the cumulative line. */
+  --p-label: 168px;
+  --p-value: 116px;
+  --p-pct: 84px;
+  --p-gap: var(--space-3);
+  --p-pad: var(--space-2);
+  --p-row: 32px;
+  container-type: inline-size;
+  margin-bottom: var(--space-6);
   padding: var(--space-4);
 }
 
-.chart-head {
+.pareto-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: var(--space-1) var(--space-4);
-  margin-bottom: var(--space-3);
+  gap: var(--space-3) var(--space-4);
 }
 
-.chart-sub {
+.pareto-eyebrow {
   color: var(--text-3);
+}
+
+.pareto-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.pareto-note {
+  margin-top: var(--space-3);
+  color: var(--text-2);
   font-size: var(--text-sm);
+}
+
+.pareto-help ul {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding-left: var(--space-4);
+}
+
+.pareto-empty {
+  margin-top: var(--space-4);
+  padding: var(--space-5) var(--space-4);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  text-align: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+}
+
+.pareto-colhead,
+.bar {
+  display: grid;
+  grid-template-columns: var(--p-label) minmax(0, 1fr) var(--p-value) var(--p-pct) var(--p-pct);
+  align-items: center;
+  gap: var(--p-gap);
+  padding: 0 var(--p-pad);
+}
+
+.pareto-colhead {
+  height: 28px;
+  margin-top: var(--space-4);
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.pareto-colhead .num {
+  white-space: nowrap;
+}
+
+.pareto-axis {
+  position: relative;
+  align-self: stretch;
+}
+
+.pareto-axis span {
+  position: absolute;
+  top: 7px;
+  transform: translateX(-50%);
+}
+
+.pareto-axis span:first-child {
+  transform: none;
+}
+
+.pareto-axis span:last-child {
+  transform: translateX(-100%);
+}
+
+.pareto-rows {
+  position: relative;
 }
 
 .bars {
   display: grid;
-  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
 .bar {
-  display: grid;
-  grid-template-columns: minmax(96px, 168px) minmax(0, 1fr) 3ch;
-  align-items: center;
-  gap: var(--space-3);
   width: 100%;
-  height: 30px;
-  padding: 0 var(--space-2);
+  height: var(--p-row);
   color: var(--text);
   font: inherit;
   font-size: var(--text-sm);
   text-align: left;
   background: transparent;
   border: 0;
-  border-radius: var(--radius-md);
+  border-bottom: 1px solid var(--border);
   cursor: pointer;
   transition: background-color var(--dur) var(--ease);
 }
 
 .bar:hover {
   background: var(--panel-hover);
+}
+
+.bar:focus-visible {
+  outline-offset: -2px;
 }
 
 .bar-label {
@@ -558,26 +724,21 @@ select.field {
 }
 
 .bar-track {
-  height: 14px;
+  height: 12px;
 }
 
 .bar-fill {
   display: block;
-  min-width: 2px;
+  min-width: 1px;
   height: 100%;
-  background: var(--accent-fill);
+  background: var(--chart-bar);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   transition:
     width var(--dur) var(--ease),
-    opacity var(--dur) var(--ease);
+    background-color var(--dur) var(--ease);
 }
 
-.bar-count {
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-/* The uncategorized bucket is "unknown", so it is not drawn in the data colour. */
+/* The uncategorized bucket is "unknown", so it is outlined rather than filled. */
 .bar.is-uncategorized .bar-fill {
   background: transparent;
   border: 1px dashed var(--text-3);
@@ -588,17 +749,152 @@ select.field {
   font-style: italic;
 }
 
-.bars.has-selection .bar:not([aria-pressed='true']) .bar-fill {
-  opacity: 0.35;
-}
-
 .bar[aria-pressed='true'] {
-  background: var(--panel-raised);
+  background: var(--accent-wash);
 }
 
 .bar[aria-pressed='true'] .bar-label {
   color: var(--text);
-  font-weight: 500;
+}
+
+.bar[aria-pressed='true'] .bar-fill {
+  background: var(--chart-bar-selected);
+  border-color: var(--chart-bar-selected);
+}
+
+.bar-count,
+.bar-share,
+.bar-cum {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.bar-share,
+.bar-cum {
+  color: var(--text-2);
+}
+
+/* Grid lines and the cumulative line, drawn over the plot column only. */
+.pareto-overlay {
+  position: absolute;
+  top: 0;
+  left: calc(var(--p-pad) + var(--p-label) + var(--p-gap));
+  right: calc(var(--p-pad) + var(--p-value) + var(--p-pct) * 2 + var(--p-gap) * 3);
+  height: 100%;
+  pointer-events: none;
+}
+
+.pareto-overlay svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.pareto-overlay .grid {
+  stroke: var(--chart-grid);
+  stroke-width: 1;
+}
+
+.pareto-overlay .cum-line {
+  stroke: var(--chart-line);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.pareto-overlay .cum-dot {
+  fill: var(--chart-line);
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+
+.pareto-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-3);
+  color: var(--text-3);
+  font-size: var(--text-xs);
+}
+
+.pareto-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-bar {
+  width: 14px;
+  height: 8px;
+  background: var(--chart-bar);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.legend-line {
+  position: relative;
+  width: 18px;
+  height: 2px;
+  background: var(--chart-line);
+}
+
+.legend-line::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  left: 5px;
+  width: 8px;
+  height: 8px;
+  background: var(--chart-line);
+  border-radius: 50%;
+}
+
+.pareto-readout {
+  min-height: 3.1em;
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.pareto-readout strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* With less room (a narrow window, or the detail panel open) the plot keeps its
+   width: the share column goes, the other columns tighten, and the axis shows fewer labels. */
+@container (max-width: 760px) {
+  .pareto-colhead,
+  .bar {
+    grid-template-columns: 132px minmax(0, 1fr) 92px 76px;
+  }
+
+  .bar-share,
+  .pareto-colhead .col-share,
+  .pareto-axis .minor {
+    display: none;
+  }
+
+  .pareto-overlay {
+    left: calc(var(--p-pad) + 132px + var(--p-gap));
+    right: calc(var(--p-pad) + 92px + 76px + var(--p-gap) * 2);
+  }
+}
+
+@container (max-width: 520px) {
+  .pareto-colhead,
+  .bar {
+    grid-template-columns: 104px minmax(0, 1fr) 84px 64px;
+  }
+
+  .pareto-overlay {
+    left: calc(var(--p-pad) + 104px + var(--p-gap));
+    right: calc(var(--p-pad) + 84px + 64px + var(--p-gap) * 2);
+  }
 }
 
 /* ---------- Records ---------- */
@@ -636,7 +932,7 @@ table {
 
 th,
 td {
-  height: 38px;
+  height: 36px;
   padding: 0 var(--space-3);
   overflow: hidden;
   text-align: left;
@@ -649,10 +945,9 @@ thead th {
   position: sticky;
   top: 0;
   z-index: 1;
-  height: 34px;
+  height: 32px;
   color: var(--text-3);
-  font-size: var(--text-xs);
-  font-weight: 500;
+  font-weight: 400;
   background: var(--panel-raised);
   border-bottom-color: var(--border-strong);
 }
@@ -701,16 +996,20 @@ tbody tr:last-child td {
 }
 
 .col-qty {
-  width: 104px;
+  width: 116px;
 }
 
 .col-cost {
-  width: 124px;
+  width: 132px;
 }
 
 .num {
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+td.num {
+  color: var(--text);
 }
 
 /* Columns give way by the room the table actually has, which shrinks when the
@@ -741,10 +1040,6 @@ tbody tr:last-child td {
   }
 }
 
-td.num {
-  color: var(--text);
-}
-
 .row-open {
   padding: 2px 0;
   color: var(--text);
@@ -758,7 +1053,8 @@ td.num {
 }
 
 .row-open:hover {
-  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 tbody th .tag {
@@ -780,10 +1076,6 @@ tbody th .tag {
   border-radius: 50%;
 }
 
-.badge-open .badge-dot {
-  background: var(--status-open);
-}
-
 /* A hollow ring for open and a solid dot for closed, so state is not carried by hue alone. */
 .badge-open .badge-dot {
   background: transparent;
@@ -792,6 +1084,11 @@ tbody th .tag {
 
 .badge-closed .badge-dot {
   background: var(--status-closed);
+}
+
+.badge-error .badge-dot {
+  background: var(--danger);
+  border-radius: 1px;
 }
 
 .currency-unknown {
@@ -822,7 +1119,7 @@ tbody th .tag {
   width: min(var(--detail-w), 100vw);
   background: var(--panel);
   border-left: 1px solid var(--border-strong);
-  box-shadow: -16px 0 32px rgb(0 0 0 / 0.35);
+  box-shadow: var(--panel-shadow);
   animation: detail-in var(--dur) var(--ease);
 }
 
@@ -852,7 +1149,6 @@ tbody th .tag {
 
 .detail-eyebrow {
   color: var(--text-3);
-  font-size: var(--text-xs);
 }
 
 .detail-title {
@@ -879,8 +1175,7 @@ tbody th .tag {
 .detail-section h3 {
   margin-bottom: var(--space-2);
   color: var(--text-3);
-  font-size: var(--text-xs);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .facts {
@@ -909,47 +1204,50 @@ tbody th .tag {
   color: var(--text-2);
   font-size: var(--text-xs);
   background: var(--panel-raised);
-  border-left: 2px solid var(--status-open);
+  border-left: 2px solid var(--border-strong);
   border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.source-row {
+  margin-top: var(--space-3);
+}
+
+.source-row summary,
+.ready-preview summary {
+  width: fit-content;
+  color: var(--text-2);
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.source-row summary:hover,
+.ready-preview summary:hover {
+  color: var(--text);
+}
+
+.source-row .facts {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.source-row dd {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  white-space: pre-wrap;
 }
 
 /* ---------- Import ---------- */
 
-.pad {
-  padding: var(--space-4);
-}
-
 .import-section {
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-5);
 }
 
 .import-section > .section-title {
   margin-bottom: var(--space-3);
-}
-
-.hint {
-  color: var(--text-3);
-  font-size: var(--text-sm);
-}
-
-.button-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.empty .button-row {
-  justify-content: center;
-}
-
-a.btn {
-  text-decoration: none;
-}
-
-.btn-danger {
-  color: var(--danger);
-  border-color: var(--danger-line);
 }
 
 .file-row {
@@ -960,7 +1258,7 @@ a.btn {
 }
 
 .file-pick:focus-within {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -1010,7 +1308,7 @@ a.btn {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3) var(--space-4);
-  margin-bottom: var(--space-2);
+  margin-bottom: var(--space-3);
   padding-top: var(--space-4);
   border-top: 1px solid var(--border);
 }
@@ -1022,19 +1320,65 @@ a.btn {
   font-size: var(--text-xs);
 }
 
-.currency-input {
+.short-input {
   width: 15ch;
   font-family: var(--font-mono);
+}
+
+.short-input::placeholder {
+  font-family: var(--font-sans);
+}
+
+.currency-input {
   text-transform: uppercase;
 }
 
 .currency-input::placeholder {
-  font-family: var(--font-sans);
   text-transform: none;
 }
 
-.field:disabled {
-  opacity: 0.5;
+/* How the file's numbers will be read, shown before anything is imported. */
+.readings {
+  margin: var(--space-3) 0;
+  padding: var(--space-3);
+  background: var(--panel-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.readings h3 {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.readings ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: var(--space-1) var(--space-4);
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  list-style: none;
+}
+
+.readings li {
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.readings .raw {
+  color: var(--text-2);
+}
+
+.readings .arrow,
+.readings .what {
+  color: var(--text-3);
+}
+
+.readings .unread {
+  color: var(--danger);
 }
 
 .chips {
@@ -1047,25 +1391,17 @@ a.btn {
 }
 
 .chip {
-  padding: 4px var(--space-3);
+  padding: 3px var(--space-3);
   color: var(--text-2);
   font-size: var(--text-sm);
   background: var(--panel-raised);
   border: 1px solid var(--border-strong);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
 }
 
 .chip strong {
   color: var(--text);
   font-weight: 600;
-}
-
-.chip-ready {
-  border-color: var(--accent-line);
-}
-
-.chip-ready strong {
-  color: var(--accent);
 }
 
 .chip-error {
@@ -1076,55 +1412,18 @@ a.btn {
   color: var(--danger);
 }
 
-.badge-error .badge-dot {
-  background: var(--danger);
-  border-radius: 1px;
-}
-
 .ready-preview {
   margin-top: var(--space-4);
-}
-
-.ready-preview summary,
-.source-row summary {
-  width: fit-content;
-  color: var(--text-2);
-  font-size: var(--text-sm);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-}
-
-.ready-preview summary:hover,
-.source-row summary:hover {
-  color: var(--text);
 }
 
 .ready-preview .table-wrap {
   margin-top: var(--space-3);
 }
 
-.source-row {
-  margin-top: var(--space-3);
-}
-
-.source-row .facts {
-  margin-top: var(--space-2);
-  padding: var(--space-3);
-  background: var(--panel-raised);
-  border-radius: var(--radius-md);
-}
-
-.source-row dd {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  white-space: pre-wrap;
-}
-
 .import-done {
   display: grid;
   gap: var(--space-3);
   margin-bottom: var(--space-4);
-  border-color: var(--accent-line);
 }
 
 /* Tables that list things rather than open records. */
@@ -1198,6 +1497,10 @@ td.actions .btn + .btn {
   font-size: var(--text-xs);
 }
 
+.empty .button-row {
+  justify-content: center;
+}
+
 /* ---------- Narrower screens ---------- */
 
 @media (max-width: 1100px) {
@@ -1220,6 +1523,10 @@ td.actions .btn + .btn {
 
   .app.has-detail .view {
     margin-right: auto;
+  }
+
+  .view {
+    padding: var(--space-5) var(--space-5) var(--space-6);
   }
 }
 
@@ -1255,6 +1562,15 @@ td.actions .btn + .btn {
     gap: var(--space-2);
   }
 
+  .rail a[aria-current='page']::before {
+    top: auto;
+    right: 7px;
+    bottom: 0;
+    left: 7px;
+    width: auto;
+    height: 2px;
+  }
+
   .rail a span {
     position: static;
     width: auto;
@@ -1263,6 +1579,7 @@ td.actions .btn + .btn {
   }
 
   .crumbs,
+  .local,
   .col-count:last-of-type {
     display: none;
   }

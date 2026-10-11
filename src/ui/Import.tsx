@@ -3,15 +3,15 @@ import type { ImportBatch } from '../core/ncr.ts';
 import { FIELD_LABELS, IMPORT_FIELDS } from '../modules/quality/importRules.ts';
 import type {
   DateFormat,
-  DecimalSeparator,
   ImportField,
+  NumberFormat,
   ImportMapping,
   ImportOptions,
   PlannedRow,
 } from '../modules/quality/importRules.ts';
 import type { ImportCommitResponse, ImportPreviewResponse } from '../server/contract.ts';
 import { commitImport, previewImport, removeImport } from './api.ts';
-import { Cost, Text, Unknown } from './bits.tsx';
+import { Cost, Quantity, Text, Unknown } from './bits.tsx';
 import { formatWhole, plural } from './format.ts';
 
 interface ChosenFile {
@@ -21,6 +21,8 @@ interface ChosenFile {
 
 const FIELD_HINTS: Partial<Record<ImportField, string>> = {
   ncrNumber: 'Required. Must be unique.',
+  quantityAffected: 'Whole pieces, or a measured amount if a unit is given.',
+  quantityUnit: 'Such as kg or m. Empty means a count of pieces.',
   cost: 'The amount alone, without a currency symbol.',
   currency: 'An ISO code such as USD or EUR.',
   reportedCause: 'Kept as the reported cause, not as a verified root cause.',
@@ -155,6 +157,7 @@ export function ImportView(props: { imports: ImportBatch[]; onChanged: () => Pro
   const [file, setFile] = useState<ChosenFile | null>(null);
   const [preview, setPreview] = useState<ImportPreviewResponse | null>(null);
   const [currencyDraft, setCurrencyDraft] = useState('');
+  const [unitDraft, setUnitDraft] = useState('');
   const [result, setResult] = useState<ImportCommitResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -192,6 +195,7 @@ export function ImportView(props: { imports: ImportBatch[]; onChanged: () => Pro
     setPreview(null);
     setResult(null);
     setCurrencyDraft('');
+    setUnitDraft('');
     await runPreview(chosen);
   };
 
@@ -202,6 +206,7 @@ export function ImportView(props: { imports: ImportBatch[]; onChanged: () => Pro
     setResult(null);
     setError(null);
     setCurrencyDraft('');
+    setUnitDraft('');
     if (picker.current) picker.current.value = '';
   };
 
@@ -218,6 +223,12 @@ export function ImportView(props: { imports: ImportBatch[]; onChanged: () => Pro
     setCurrencyDraft(code);
     if (code === '') setOptions({ defaultCurrency: null });
     else if (code.length === 3) setOptions({ defaultCurrency: code });
+  };
+
+  const setUnit = (value: string) => {
+    const unit = value.slice(0, 20);
+    setUnitDraft(unit);
+    setOptions({ defaultQuantityUnit: unit.trim() === '' ? null : unit.trim() });
   };
 
   const commit = async () => {
@@ -280,6 +291,7 @@ export function ImportView(props: { imports: ImportBatch[]; onChanged: () => Pro
   const notImported = summary ? summary.errors + summary.duplicatesInFile + summary.duplicatesStored : 0;
   const canImport = preview !== null && preview.blocking.length === 0 && preview.summary.ready > 0;
   const hasDates = preview !== null && preview.mapping.openedOn !== null;
+  const hasNumbers = preview !== null && (preview.mapping.cost !== null || preview.mapping.quantityAffected !== null);
 
   return (
     <>
@@ -377,20 +389,37 @@ export function ImportView(props: { imports: ImportBatch[]; onChanged: () => Pro
                 </select>
               </label>
               <label>
-                <span>Decimal separator</span>
+                <span>Numbers are written</span>
                 <select
                   className="field"
-                  value={preview.options.decimalSeparator}
-                  onChange={(e) => setOptions({ decimalSeparator: e.target.value as DecimalSeparator })}
+                  id="number-format"
+                  value={preview.options.numberFormat ?? ''}
+                  disabled={!hasNumbers}
+                  onChange={(e) => setOptions({ numberFormat: e.target.value as NumberFormat })}
                 >
-                  <option value=".">Point, as 1,234.56</option>
-                  <option value=",">Comma, as 1.234,56</option>
+                  <option value="" disabled>
+                    {preview.detected.numberFormatNeeded ? 'Choose…' : 'No separators in this file'}
+                  </option>
+                  <option value="point">With a decimal point, as 1,234.56</option>
+                  <option value="comma">With a decimal comma, as 1.234,56</option>
                 </select>
+              </label>
+              <label>
+                <span>Unit for quantities that state none</span>
+                <input
+                  className="field short-input unit-input"
+                  type="text"
+                  autoComplete="off"
+                  placeholder="Pieces"
+                  maxLength={20}
+                  value={unitDraft}
+                  onChange={(e) => setUnit(e.target.value)}
+                />
               </label>
               <label>
                 <span>Currency for costs that state none</span>
                 <input
-                  className="field currency-input"
+                  className="field short-input currency-input"
                   type="text"
                   inputMode="text"
                   autoComplete="off"
@@ -402,9 +431,36 @@ export function ImportView(props: { imports: ImportBatch[]; onChanged: () => Pro
               </label>
             </div>
             <p className="hint">
-              Leave the currency empty unless you know it. A cost with no currency is stored as "currency unspecified" and
-              is never added to costs in a known currency.
+              {preview.detected.numberFormat !== null
+                ? `The number format was read from values in the file that can only mean one thing. `
+                : preview.detected.numberFormatNeeded
+                  ? `A value such as 1,234 could be 1234 or 1.234, so Valynce does not choose for you. `
+                  : ''}
+              Leave the unit and currency empty unless you know them. A quantity with no unit is a whole count of pieces, and
+              a cost with no currency is stored as "currency unspecified".
             </p>
+
+            {preview.numberExamples.length > 0 && (
+              <div className="readings" aria-labelledby="readings-title">
+                <h3 id="readings-title">How the numbers in this file will be read</h3>
+                <ul>
+                  {preview.numberExamples.map((example) => (
+                    <li key={`${example.field}-${example.raw}`}>
+                      <span className="what">{example.field === 'cost' ? 'cost' : 'qty'}</span>
+                      <span className="raw">"{example.raw}"</span>
+                      <span className="arrow" aria-hidden="true">
+                        →
+                      </span>
+                      {example.read === null ? (
+                        <span className="unread">{preview.options.numberFormat === null && /[.,]/.test(example.raw) ? 'not decided yet' : 'cannot be read'}</span>
+                      ) : (
+                        <span className="read">{example.read}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </section>
 
           <section className="card pad import-section" aria-labelledby="step-check">
@@ -493,7 +549,7 @@ export function ImportView(props: { imports: ImportBatch[]; onChanged: () => Pro
                             <Text value={row.fields!.status} />
                           </td>
                           <td className="num">
-                            {row.fields!.quantityAffected === null ? <Unknown /> : formatWhole(row.fields!.quantityAffected)}
+                            <Quantity value={row.fields!.quantityAffected} unit={row.fields!.quantityUnit} />
                           </td>
                           <td className="num">
                             <Cost cents={row.fields!.costCents} currency={row.fields!.currency} />

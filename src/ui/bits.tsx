@@ -1,6 +1,6 @@
 // Small pieces shared by the views.
 import type { ReactNode } from 'react';
-import { formatCost } from './format.ts';
+import { formatCost, formatQuantity } from './format.ts';
 
 const ICONS: Record<string, ReactNode> = {
   overview: (
@@ -20,6 +20,14 @@ const ICONS: Record<string, ReactNode> = {
     </>
   ),
   close: <path d="M4 4l8 8M12 4l-8 8" />,
+  download: <path d="M8 2v8M5 7l3 3 3-3M2 11v2a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-2" />,
+  sun: (
+    <>
+      <circle cx="8" cy="8" r="3" />
+      <path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M3.05 3.05l1.06 1.06M11.89 11.89l1.06 1.06M3.05 12.95l1.06-1.06M11.89 4.11l1.06-1.06" />
+    </>
+  ),
+  moon: <path d="M13.5 9.5A5.5 5.5 0 0 1 6.5 2.5a5.5 5.5 0 1 0 7 7Z" />,
   help: (
     <>
       <circle cx="8" cy="8" r="6" />
@@ -28,7 +36,7 @@ const ICONS: Record<string, ReactNode> = {
   ),
 };
 
-export type IconName = 'overview' | 'records' | 'import' | 'search' | 'close' | 'help';
+export type IconName = 'overview' | 'records' | 'import' | 'search' | 'close' | 'help' | 'download' | 'sun' | 'moon';
 
 export function Icon({ name }: { name: IconName }) {
   return (
@@ -79,6 +87,11 @@ export function StatusBadge({ status }: { status: string | null }) {
       {status}
     </span>
   );
+}
+
+/** An affected quantity with its unit. A count of pieces has no unit. */
+export function Quantity({ value, unit }: { value: number | null; unit: string | null }) {
+  return value === null ? <Unknown /> : <>{formatQuantity(value, unit)}</>;
 }
 
 /** A recorded cost. An amount with no stated currency carries the generic ¤ sign, never a guessed symbol. */

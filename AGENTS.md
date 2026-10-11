@@ -51,13 +51,14 @@ These terms keep their shop-floor meaning. Do not rename, merge or reinterpret t
 |---|---|
 | NCR | Non-conformance report: one record of a part or process that did not meet a requirement. |
 | NCR count | The number of reports. One report counts once, however many units it covers. |
-| Affected quantity | The number of units the report says were affected. |
+| Affected quantity | The quantity the report says was affected. With no unit it is a whole count of pieces; with a unit of measure such as kg it may be fractional. |
 | Recorded cost | The cost written on the report. It is not an estimate or a full cost of poor quality. |
 | Defect category | The classification written on the report. |
 | Disposition | What was decided for the affected material, such as scrap, rework, use as is or return to supplier. |
 | Reported cause | The cause as written on the report. It is not a verified root cause. |
 | Demo data | Valynce's own synthetic records, stored with origin `sample` and costed in USD. Always labelled as demo data wherever it appears. |
-| Pareto analysis | Categories ranked from largest to smallest by one stated metric, with cumulative share. A Pareto chart is always of one metric. |
+| Pareto analysis | Categories ranked from largest to smallest by one stated metric, with each category's share of the total and the cumulative share. A Pareto chart is always of one metric, in one unit or currency. |
+| Population | The reports an analysis covers: those matching the search and status filter. The chart, the table under it and the export always use the same population. |
 
 ## Analysis rules
 
@@ -67,11 +68,22 @@ These terms keep their shop-floor meaning. Do not rename, merge or reinterpret t
 - Cost is stored as whole hundredths (`costCents`) so sums are exact, with an ISO 4217 `currency` beside it.
 - A cost whose currency was not stated has `currency` null and is shown as "Currency unspecified". Never assign a currency to it, and never infer one from a symbol such as `$`.
 - Never add amounts in different currencies, or stated and unstated ones, together. Show one total per currency. Valynce does not convert.
-- Categories, statuses and other values are compared exactly as written. Do not merge, rename or normalise them.
+- Affected quantity is stored in whole thousandths with its unit. A quantity with no unit is a count of pieces and must be whole. A fraction is accepted only with a recognised unit of measure.
+- Never add quantities in different units together. Show one total, and one Pareto ranking, per unit.
+- Categories, statuses and other values are compared exactly as written. Do not merge, rename or normalise them. The only exceptions are units: spellings of "pieces" all mean a count, and known units of measure are stored under one symbol.
+
+## Pareto rules
+
+- A ranking is computed in `src/modules/quality/pareto.ts` from one population and one metric. The chart, the readout, the table of contributing records and the exported file must all come from that same result.
+- Every report in the population is either in exactly one ranking or counted as missing for the metric. State the coverage beside the chart. A missing value is never ranked as zero.
+- When the total is zero, say so and show no shares. When nothing has a value, or no report matches, say that instead of drawing an empty chart.
+- Rank the uncategorized bucket by its size like any other, and draw it differently so it reads as "unknown".
+- Never call the leading category a cause, a driver or a root cause. A ranking shows where reports, quantity or cost are recorded, not why.
 
 ## Import rules
 
 - Reading a file never guesses. A date that could be read two ways blocks the import until the user chooses the format; an amount is read exactly or the row is rejected; nothing is rounded.
+- The same holds for numbers. A format is taken from the file only when a value proves it ("1,234.56" or "12,5"). A value such as "1,234" proves nothing, so the user must choose, and the preview shows how each number will be read before anything is stored.
 - A currency comes from the file's currency column or from the setting the user chose for that import. It is never taken from a symbol or assumed.
 - Every row gets a stated outcome: imported, error (with every reason), repeated in the file, already stored, or blank. Rows are numbered as a spreadsheet shows them, with the header as row 1.
 - Stored records are never overwritten. A row whose NCR ID already exists, or appeared earlier in the file, is skipped and reported with the fields that differ.
@@ -96,7 +108,8 @@ These terms keep their shop-floor meaning. Do not rename, merge or reinterpret t
 | `npm run dev` | Backend with reload plus the Vite dev server at `http://127.0.0.1:5310` |
 | `npm test` | Runs the tests in `tests` |
 | `npm run typecheck` | Type-checks UI, backend and tests |
-| `npm run check:browser` | Drives the built app in headless Chrome: clicks, keyboard, filters, restarts, layout and contrast. Needs `npm run build` first and a local Chrome |
+| `npm run check:browser` | Drives the built app in headless Chrome: clicks, keyboard, filters, both themes, restarts, layout and contrast. Needs `npm run build` first and a local Chrome |
+| `npm run demo:record` | Records the 20-second Pareto demo to `demo/out/` (git-ignored) using headless Chrome |
 | `npm run build` | Builds the UI and backend into `dist` |
 | `npm start` | Serves the built app at `http://127.0.0.1:4310` |
 
@@ -113,7 +126,10 @@ Run `npm run typecheck` and `npm test` before calling a change done. For a chang
 ## Interface
 
 - Colours, type sizes, spacing, radii, icon size and motion come from the tokens in `src/ui/tokens.css`. Do not hard-code them in components.
-- Sans-serif for interface text; monospace only for record IDs and technical values such as part numbers.
+- There are two themes, light (the default) and dark. Both define every colour token; layout, spacing and type are shared, so a component is written once. Check any interface change in both.
+- Orange is reserved for the primary action, the active view, the selected chart bar, selected controls and keyboard focus. Everything else is neutral. Orange never means "alert"; errors use the danger colour with a text label.
+- Sans-serif for descriptions and table content; monospace for navigation, column and chart labels, record IDs and technical values. Numbers that line up use tabular figures.
+- Surfaces are flat: thin borders, small radii, no gradients or decorative patterns.
 - Every control works by keyboard and shows visible focus. Status is never carried by colour alone.
 - Show only controls that work. Do not add placeholders for features that are not built.
 - Do not show trends, percentage changes, scores or findings that are not computed from the stored records.
@@ -127,4 +143,4 @@ Tests run offline against synthetic fixtures. They do not need real customer dat
 
 ## Demo
 
-`demo` is a separate Remotion project. Anything shown in the video uses synthetic fixtures, since the output is published.
+Demo videos use synthetic fixtures only, since the output is published. `scripts/record-demo.mjs` records the current demo by driving the built app; rendered files go to `demo/out/` and are not committed. A Remotion project for edited videos is not set up yet.

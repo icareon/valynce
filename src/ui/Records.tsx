@@ -1,7 +1,7 @@
 import type { NcrRecord } from '../core/ncr.ts';
 import { fieldOptions, isFiltering, NO_FILTER } from '../modules/quality/filter.ts';
 import type { RecordFilter } from '../modules/quality/filter.ts';
-import { Cost, DemoTag, Icon, StatusBadge, Text, Unknown } from './bits.tsx';
+import { Cost, DemoTag, Icon, Quantity, StatusBadge, Text } from './bits.tsx';
 import { formatWhole } from './format.ts';
 
 // <select> values are strings, so "any" and "no value" need stand-ins.
@@ -28,7 +28,7 @@ export function RecordsPanel(props: {
   const filtering = isFiltering(filter);
 
   return (
-    <section aria-label="Records">
+    <section className="records" aria-label="Records">
       {heading !== undefined && <h2 className="section-title">{heading}</h2>}
       <div className="toolbar">
         <label className="search">
@@ -142,7 +142,7 @@ export function RecordsPanel(props: {
                     <StatusBadge status={r.status} />
                   </td>
                   <td className="col-qty num">
-                    {r.quantityAffected === null ? <Unknown /> : formatWhole(r.quantityAffected)}
+                    <Quantity value={r.quantityAffected} unit={r.quantityUnit} />
                   </td>
                   <td className="col-cost num">
                     <Cost cents={r.costCents} currency={r.currency} />

@@ -1,7 +1,15 @@
 // Shapes of the JSON the local backend returns. Types only, so the UI can import them.
 import type { Delimiter } from '../core/csv.ts';
 import type { ImportBatch, InsertResult, NcrRecord } from '../core/ncr.ts';
-import type { DateFormat, DecimalSeparator, ImportMapping, ImportOptions, ImportSummary, PlannedRow } from '../modules/quality/importRules.ts';
+import type {
+  DateFormat,
+  ImportMapping,
+  ImportOptions,
+  ImportSummary,
+  NumberExample,
+  NumberFormat,
+  PlannedRow,
+} from '../modules/quality/importRules.ts';
 import type { NcrTotals } from '../modules/quality/totals.ts';
 
 export interface NcrListResponse {
@@ -31,8 +39,13 @@ export interface ImportPreviewResponse {
   examples: (string | null)[];
   mapping: ImportMapping;
   options: ImportOptions;
-  /** What the file's own values suggest. A null date format means it is ambiguous. */
-  detected: { dateFormat: DateFormat | null; decimalSeparator: DecimalSeparator };
+  /**
+   * What the file's own values prove. A null format means they do not settle it.
+   * `numberFormatNeeded` is true when some number has a separator, so the format changes what is read.
+   */
+  detected: { dateFormat: DateFormat | null; numberFormat: NumberFormat | null; numberFormatNeeded: boolean };
+  /** Numbers from the file with how each will be read under the current settings. */
+  numberExamples: NumberExample[];
   blocking: string[];
   summary: ImportSummary;
   costWithoutCurrency: number;

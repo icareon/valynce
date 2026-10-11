@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
+import { toMilli } from './ncr.ts';
 import type { ImportBatch, ImportRow, InsertResult, NcrFields, NcrOrigin, NcrRecord } from './ncr.ts';
 
 // One entry per schema version, applied in order. Never edit an entry that has
@@ -52,14 +53,22 @@ const MIGRATIONS: readonly string[] = [
   ALTER TABLE ncr ADD COLUMN source_row INTEGER;
   ALTER TABLE ncr ADD COLUMN source_json TEXT;
   `,
+  // 4: quantities carry a unit and are held in thousandths so that sums are exact.
+  // Quantities stored before this were whole piece counts; they keep their value and have no unit.
+  `
+  ALTER TABLE ncr ADD COLUMN quantity_milli INTEGER;
+  ALTER TABLE ncr ADD COLUMN quantity_unit TEXT;
+  UPDATE ncr SET quantity_milli = quantity_affected * 1000 WHERE quantity_affected IS NOT NULL;
+  ALTER TABLE ncr DROP COLUMN quantity_affected;
+  `,
 ];
 
 const INSERT_NCR = `
   INSERT INTO ncr (
     ncr_number, opened_on, part_number, supplier, defect_category, description,
-    quantity_affected, cost_cents, currency, status, disposition, reported_cause, origin, created_at,
+    quantity_milli, quantity_unit, cost_cents, currency, status, disposition, reported_cause, origin, created_at,
     import_batch_id, source_row, source_json
-  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `;
 
 function ncrValues(r: NcrFields): (string | number | null)[] {
@@ -70,7 +79,8 @@ function ncrValues(r: NcrFields): (string | number | null)[] {
     r.supplier,
     r.defectCategory,
     r.description,
-    r.quantityAffected,
+    r.quantityAffected === null ? null : toMilli(r.quantityAffected),
+    r.quantityAffected === null ? null : r.quantityUnit,
     r.costCents,
     r.currency,
     r.status,
@@ -132,7 +142,8 @@ export class NcrStorage {
       supplier: row.supplier as string | null,
       defectCategory: row.defect_category as string | null,
       description: row.description as string | null,
-      quantityAffected: row.quantity_affected as number | null,
+      quantityAffected: row.quantity_milli === null ? null : (row.quantity_milli as number) / 1000,
+      quantityUnit: row.quantity_unit as string | null,
       costCents: row.cost_cents as number | null,
       currency: row.currency as string | null,
       status: row.status as string | null,

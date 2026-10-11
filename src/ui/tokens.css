@@ -1,45 +1,17 @@
-/* Shared design tokens. Components use these names and never raw values. */
+/* Shared design tokens. Components use these names and never raw values.
+   Both themes define the same names, so layout, spacing and type are identical
+   and only colour changes. Light is the default. */
 :root {
-  color-scheme: dark;
-
-  /* Surfaces, darkest to lightest */
-  --bg: #08090b;
-  --panel: #101216;
-  --panel-raised: #15181d;
-  --panel-hover: #191d23;
-  --border: #1f242b;
-  --border-strong: #2c333c;
-
-  /* Text */
-  --text: #f3f5f7;
-  --text-2: #aab2be;
-  --text-3: #7f8896;
-
-  /* Accent: teal. --accent is for text, outlines and controls; --accent-fill is for chart marks. */
-  --accent: #2dd4bf;
-  --accent-strong: #5eead4;
-  --accent-fill: #12a594;
-  --accent-wash: rgb(45 212 191 / 0.1);
-  --accent-line: rgb(45 212 191 / 0.35);
-  --on-accent: #04211d;
-
-  /* Status. Always shown with a text label, never colour alone. */
-  --status-open: #f2b84b;
-  --status-closed: #5ecf8f;
-  --status-neutral: #aab2be;
-  --danger: #f08a80;
-  --danger-wash: rgb(240 138 128 / 0.1);
-  --danger-line: rgb(240 138 128 / 0.35);
-
   /* Type */
   --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --text-2xs: 11px;
   --text-xs: 12px;
   --text-sm: 13px;
   --text-md: 14px;
   --text-lg: 16px;
   --text-xl: 20px;
-  --text-metric: 30px;
+  --text-metric: 28px;
 
   /* Space */
   --space-1: 4px;
@@ -48,22 +20,102 @@
   --space-4: 16px;
   --space-5: 24px;
   --space-6: 32px;
+  --space-7: 40px;
 
   /* Shape */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
   --icon: 16px;
-  --control-h: 32px;
+  --control-h: 30px;
 
   /* Motion */
-  --dur: 150ms;
+  --dur: 140ms;
   --ease: cubic-bezier(0.2, 0, 0, 1);
 
   /* Layout */
   --appbar-h: 48px;
-  --rail-w: 208px;
+  --rail-w: 200px;
   --detail-w: 440px;
+}
+
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg: #f5f5f2;
+  --panel: #ffffff;
+  --panel-raised: #fafaf8;
+  --panel-hover: #f1f1ed;
+  --border: #e4e4df;
+  --border-strong: #cdcdc6;
+
+  /* Text */
+  --text: #1a1b1e;
+  --text-2: #4f5257;
+  --text-3: #686b71;
+
+  /* Accent: orange. It marks the primary action, the active view, the selected
+     chart bar, selected controls and focus. Nothing else is orange. */
+  --accent: #ff5a1f;
+  --accent-hover: #f04e14;
+  --on-accent: #1f0d05;
+  --accent-wash: rgb(255 90 31 / 0.08);
+  --accent-line: rgb(255 90 31 / 0.5);
+  --focus: #e04a12;
+
+  /* Charts */
+  --chart-bar: #5b5f66;
+  --chart-bar-selected: #ff5a1f;
+  --chart-line: #1a1b1e;
+  --chart-grid: #e4e4df;
+
+  /* Status. Always shown with a text label, never colour alone. */
+  --status-open: #b45309;
+  --status-closed: #15803d;
+  --status-neutral: #686b71;
+  --danger: #b42318;
+  --danger-wash: rgb(180 35 24 / 0.06);
+  --danger-line: rgb(180 35 24 / 0.4);
+
+  --panel-shadow: -6px 0 18px rgb(0 0 0 / 0.06);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #0d0d0d;
+  --panel: #161616;
+  --panel-raised: #1c1c1c;
+  --panel-hover: #222222;
+  --border: #272727;
+  --border-strong: #363636;
+
+  --text: #ededeb;
+  --text-2: #a9a9a6;
+  --text-3: #8c8c89;
+
+  --accent: #ff5a1f;
+  --accent-hover: #ff6e3a;
+  --on-accent: #1f0d05;
+  --accent-wash: rgb(255 90 31 / 0.12);
+  --accent-line: rgb(255 90 31 / 0.55);
+  --focus: #ff7a45;
+
+  --chart-bar: #8a8a8f;
+  --chart-bar-selected: #f2551e;
+  --chart-line: #ededeb;
+  --chart-grid: #272727;
+
+  --status-open: #f2b84b;
+  --status-closed: #5ecf8f;
+  --status-neutral: #a9a9a6;
+  --danger: #f08a80;
+  --danger-wash: rgb(240 138 128 / 0.1);
+  --danger-line: rgb(240 138 128 / 0.4);
+
+  --panel-shadow: -6px 0 18px rgb(0 0 0 / 0.3);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -12,8 +12,13 @@ export interface NcrFields {
   supplier: string | null;
   defectCategory: string | null;
   description: string | null;
-  /** Units affected, a whole number. */
+  /**
+   * Quantity affected, in `quantityUnit`. With no unit it is a count of pieces
+   * and always whole. With a unit of measure it may have up to three decimals.
+   */
   quantityAffected: number | null;
+  /** Unit of measure for the quantity, such as kg. Null means a count of pieces. */
+  quantityUnit: string | null;
   /** Cost as recorded on the report, in hundredths of `currency`. */
   costCents: number | null;
   /** ISO 4217 code for the cost. Null means the currency was not stated; it is never assumed. */
@@ -86,6 +91,39 @@ export function isCalendarDate(value: string): boolean {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 }
 
+// Ways of writing "a count of pieces". They all mean the same thing, so they are stored as no unit.
+const PIECE_UNITS = new Set(['pc', 'pcs', 'piece', 'pieces', 'ea', 'each', 'unit', 'units', 'count', 'no', 'nos', 'stk', 'st']);
+
+// Units of measure in which a fraction makes sense, keyed by lower-case spelling.
+const MEASURE_UNITS = new Map<string, string>([
+  ['kg', 'kg'], ['g', 'g'], ['mg', 'mg'], ['t', 't'], ['lb', 'lb'], ['lbs', 'lb'], ['oz', 'oz'],
+  ['m', 'm'], ['cm', 'cm'], ['mm', 'mm'], ['km', 'km'], ['in', 'in'], ['ft', 'ft'], ['yd', 'yd'],
+  ['l', 'L'], ['ml', 'mL'], ['gal', 'gal'],
+  ['m2', 'm²'], ['m²', 'm²'], ['sqm', 'm²'], ['cm2', 'cm²'], ['cm²', 'cm²'], ['sqft', 'ft²'], ['ft2', 'ft²'], ['ft²', 'ft²'],
+  ['m3', 'm³'], ['m³', 'm³'], ['cm3', 'cm³'], ['cm³', 'cm³'],
+]);
+
+export interface QuantityUnit {
+  /** The unit as stored: null for a count of pieces, a standard symbol for a known measure, otherwise as written. */
+  unit: string | null;
+  /** True only for a recognised unit of measure, where a fractional quantity is meaningful. */
+  fractional: boolean;
+}
+
+/** Reads a unit as written on a report. An empty unit, or any spelling of "pieces", is a piece count. */
+export function readQuantityUnit(raw: string | null | undefined): QuantityUnit {
+  const text = (raw ?? '').trim();
+  if (text === '' || PIECE_UNITS.has(text.toLowerCase().replace(/\.$/, ''))) return { unit: null, fractional: false };
+  const measure = MEASURE_UNITS.get(text.toLowerCase());
+  return measure === undefined ? { unit: text, fractional: false } : { unit: measure, fractional: true };
+}
+
+/** Thousandths of a quantity, exactly. Null when the number has more than three decimals. */
+export function toMilli(quantity: number): number | null {
+  const milli = Math.round(quantity * 1000);
+  return Number.isSafeInteger(milli) && Math.abs(milli / 1000 - quantity) < 1e-9 ? milli : null;
+}
+
 let knownCurrencies: Set<string> | undefined;
 
 /** True for an upper-case ISO 4217 code this runtime knows, such as USD or EUR. */
@@ -131,15 +169,30 @@ export function parseNcrFields(input: unknown): ParseResult {
     }
   }
 
-  const wholeNumber = (field: 'quantityAffected' | 'costCents'): number | null => {
-    const value = raw[field];
-    if (isMissing(value)) return null;
-    if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return value;
-    errors.push(`${field} must be a whole number that is not negative`);
-    return null;
-  };
-  const quantityAffected = wholeNumber('quantityAffected');
-  const costCents = wholeNumber('costCents');
+  const { unit: quantityUnit, fractional } = readQuantityUnit(typeof raw.quantityUnit === 'string' ? raw.quantityUnit : null);
+  if (!isMissing(raw.quantityUnit) && typeof raw.quantityUnit !== 'string') errors.push('quantityUnit must be text');
+
+  let quantityAffected: number | null = null;
+  if (!isMissing(raw.quantityAffected)) {
+    const value = raw.quantityAffected;
+    const milli = typeof value === 'number' && Number.isFinite(value) && value >= 0 ? toMilli(value) : null;
+    if (milli === null) {
+      errors.push('quantityAffected must be a number that is not negative, with at most three decimals');
+    } else if (!fractional && milli % 1000 !== 0) {
+      errors.push('quantityAffected must be a whole number unless quantityUnit is a unit of measure such as kg');
+    } else {
+      quantityAffected = milli / 1000;
+    }
+  }
+
+  let costCents: number | null = null;
+  if (!isMissing(raw.costCents)) {
+    if (typeof raw.costCents === 'number' && Number.isSafeInteger(raw.costCents) && raw.costCents >= 0) {
+      costCents = raw.costCents;
+    } else {
+      errors.push('costCents must be a whole number that is not negative');
+    }
+  }
 
   let currency: string | null = null;
   if (!isMissing(raw.currency)) {
@@ -151,5 +204,16 @@ export function parseNcrFields(input: unknown): ParseResult {
   }
 
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, value: { ncrNumber, openedOn, ...text, quantityAffected, costCents, currency } };
+  return {
+    ok: true,
+    value: {
+      ncrNumber,
+      openedOn,
+      ...text,
+      quantityAffected,
+      quantityUnit: quantityAffected === null ? null : quantityUnit,
+      costCents,
+      currency,
+    },
+  };
 }

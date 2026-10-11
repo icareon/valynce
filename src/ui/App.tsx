@@ -1,24 +1,28 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { countByCategory } from '../modules/quality/categories.ts';
 import { filterRecords, NO_FILTER } from '../modules/quality/filter.ts';
 import type { RecordFilter } from '../modules/quality/filter.ts';
+import { computePareto } from '../modules/quality/pareto.ts';
+import type { ParetoMetric } from '../modules/quality/pareto.ts';
 import type { NcrListResponse } from '../server/contract.ts';
 import { listNcrs, loadSample, removeSample } from './api.ts';
 import { Icon } from './bits.tsx';
 import type { IconName } from './bits.tsx';
 import { plural } from './format.ts';
 import { ImportView } from './Import.tsx';
-import { CategoryChart, MetricCards } from './Overview.tsx';
+import { MetricCards, ParetoPanel } from './Overview.tsx';
 import { RecordDetail } from './RecordDetail.tsx';
 import { RecordsPanel } from './Records.tsx';
 
 type View = 'overview' | 'records' | 'import';
+type Theme = 'light' | 'dark';
 
 const VIEWS: { id: View; label: string; icon: IconName }[] = [
   { id: 'overview', label: 'Overview', icon: 'overview' },
   { id: 'records', label: 'Records', icon: 'records' },
   { id: 'import', label: 'Import', icon: 'import' },
 ];
+
+const THEME_KEY = 'valynce-theme';
 
 function viewFromHash(): View {
   const id = window.location.hash.replace(/^#\/?/, '');
@@ -33,6 +37,25 @@ function useView(): View {
     return () => window.removeEventListener('hashchange', onChange);
   }, []);
   return view;
+}
+
+/**
+ * The theme is set on <html> by a script in index.html before the page paints.
+ * Switching only changes that attribute, so nothing on the page is reset.
+ */
+function useTheme(): [Theme, () => void] {
+  const [theme, setTheme] = useState<Theme>(() => (document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light'));
+  const toggle = () => {
+    const next: Theme = theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try {
+      localStorage.setItem(THEME_KEY, next);
+    } catch {
+      // Storage can be unavailable; the theme still applies for this visit.
+    }
+    setTheme(next);
+  };
+  return [theme, toggle];
 }
 
 function DemoNotice(props: { demo: number; total: number; busy: boolean; onRemove: () => void }) {
@@ -53,11 +76,15 @@ function DemoNotice(props: { demo: number; total: number; busy: boolean; onRemov
 
 export function App() {
   const view = useView();
+  const [theme, toggleTheme] = useTheme();
   const [data, setData] = useState<NcrListResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<RecordFilter>(NO_FILTER);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [metric, setMetric] = useState<ParetoMetric>('count');
+  // The currency or unit chosen for each metric, when it has more than one.
+  const [seriesUnits, setSeriesUnits] = useState<Partial<Record<ParetoMetric, string | null>>>({});
   const opener = useRef<HTMLElement | null>(null);
 
   const refresh = useCallback(async () => {
@@ -86,10 +113,21 @@ export function App() {
 
   const records = useMemo(() => data?.records ?? [], [data]);
   const visible = useMemo(() => filterRecords(records, filter), [records, filter]);
-  // The chart counts whatever search and status allow, so its bars always add
-  // up to a stated number and each bar equals the table count after clicking it.
-  const chartRecords = useMemo(() => filterRecords(records, { ...filter, category: undefined }), [records, filter]);
-  const categories = useMemo(() => countByCategory(chartRecords), [chartRecords]);
+  // One population for the chart, its export and the table: the reports that
+  // search and status allow. Selecting a category then narrows only the table.
+  const population = useMemo(() => filterRecords(records, { ...filter, category: undefined }), [records, filter]);
+  const pareto = useMemo(() => computePareto(population, metric), [population, metric]);
+  const categoryCounts = useMemo(() => {
+    const counts = new Map<string | null, number>();
+    for (const r of population) counts.set(r.defectCategory, (counts.get(r.defectCategory) ?? 0) + 1);
+    return counts;
+  }, [population]);
+  // Which currency or unit to rank when there are several: the one most stored
+  // reports use, so that applying a filter does not switch it unasked.
+  const usualUnit = useMemo(
+    () => [...computePareto(records, metric).series].sort((a, b) => b.recorded - a.recorded)[0]?.unit,
+    [records, metric],
+  );
   const selected = records.find((r) => r.id === selectedId) ?? null;
 
   const openRecord = (id: number) => {
@@ -128,6 +166,8 @@ export function App() {
     />
   );
 
+  const otherTheme = theme === 'dark' ? 'light' : 'dark';
+
   return (
     <div className={`app${selected !== null && view !== 'import' ? ' has-detail' : ''}`}>
       <header className="appbar">
@@ -139,9 +179,7 @@ export function App() {
         </a>
         <p className="crumbs">
           <span>Quality</span>
-          <span className="sep" aria-hidden="true">
-            /
-          </span>
+          <span aria-hidden="true">/</span>
           <span className="here">NCR Analyzer</span>
         </p>
         <span className="spacer" />
@@ -149,6 +187,16 @@ export function App() {
           <span className="local-dot" aria-hidden="true" />
           Local
         </span>
+        <button
+          type="button"
+          className="btn theme-toggle"
+          aria-label={`Switch to ${otherTheme} theme`}
+          title={`Switch to ${otherTheme} theme`}
+          onClick={toggleTheme}
+        >
+          <Icon name={otherTheme === 'dark' ? 'moon' : 'sun'} />
+          {otherTheme === 'dark' ? 'Dark' : 'Light'}
+        </button>
       </header>
 
       <nav className="rail" aria-label="Views">
@@ -168,14 +216,12 @@ export function App() {
             </p>
           )}
 
-          {data !== null && view === 'import' && <ImportView imports={data.imports} onChanged={refresh} />}
-
           {data !== null && view !== 'import' && records.length === 0 && (
             <div className="empty">
               <h1>No reports yet</h1>
               <p>
-                Valynce analyses non-conformance reports on your own computer, showing report counts, affected units
-                and recorded cost by defect category.
+                Valynce analyses non-conformance reports on your own computer, ranking defect categories by report count,
+                affected quantity and recorded cost.
               </p>
               <div className="button-row">
                 <button type="button" className="btn btn-primary btn-lg" disabled={busy} onClick={() => void run(loadSample)}>
@@ -199,10 +245,13 @@ export function App() {
                 {demoNotice}
               </div>
               <MetricCards totals={data.totals} categorized={records.filter((r) => r.defectCategory !== null).length} />
-              <CategoryChart
-                categories={categories}
-                total={chartRecords.length}
+              <ParetoPanel
+                result={pareto}
                 stored={records.length}
+                categoryCounts={categoryCounts}
+                onMetric={setMetric}
+                seriesUnit={metric in seriesUnits ? seriesUnits[metric] : usualUnit}
+                onSeries={(unit) => setSeriesUnits({ ...seriesUnits, [metric]: unit })}
                 selected={filter.category}
                 onSelect={(category) => setFilter({ ...filter, category })}
               />
@@ -221,6 +270,13 @@ export function App() {
               </div>
               {recordsPanel()}
             </>
+          )}
+
+          {/* Kept mounted while another view is shown, so a file being checked is not lost. */}
+          {data !== null && (
+            <div className="import-view" hidden={view !== 'import'}>
+              <ImportView imports={data.imports} onChanged={refresh} />
+            </div>
           )}
         </div>
       </main>

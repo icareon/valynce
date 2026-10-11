@@ -24,7 +24,7 @@ test('the sample fixture is valid, has unique NCR numbers and includes missing v
   // Expected values were summed from the fixture file separately, not with computeTotals.
   assert.deepEqual(computeTotals(records), {
     recordCount: 24,
-    quantityAffected: { sum: 1722, recorded: 21, missing: 3 },
+    quantity: { groups: [{ unit: null, sum: 1722, recorded: 21 }], recorded: 21, missing: 3 },
     cost: { groups: [{ currency: 'USD', sumCents: 2015250, recorded: 20 }], recorded: 20, missing: 4 },
   });
 });

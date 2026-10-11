@@ -7,8 +7,8 @@ import { test } from 'node:test';
 import { parseCsv } from '../src/core/csv.ts';
 import type { NcrFields } from '../src/core/ncr.ts';
 import { NcrStorage } from '../src/core/storage.ts';
-import { countByCategory } from '../src/modules/quality/categories.ts';
-import { detectDateFormat, planImport, suggestMapping } from '../src/modules/quality/importRules.ts';
+import { detectDateFormat, detectNumberFormat, numberExamples, planImport, suggestMapping } from '../src/modules/quality/importRules.ts';
+import { computePareto } from '../src/modules/quality/pareto.ts';
 import type { ImportMapping, ImportOptions } from '../src/modules/quality/importRules.ts';
 import { computeTotals } from '../src/modules/quality/totals.ts';
 import { createApp } from '../src/server/app.ts';
@@ -18,7 +18,7 @@ import { loadSampleRecords } from '../src/server/sample.ts';
 const root = resolve(import.meta.dirname, '..');
 const exampleText = readFileSync(join(root, 'fixtures', 'ncr-import-example.csv'), 'utf8');
 const loadSample = () => loadSampleRecords(join(root, 'fixtures', 'ncr-sample.json'));
-const ISO: ImportOptions = { dateFormat: 'YMD', decimalSeparator: '.', defaultCurrency: null };
+const ISO: ImportOptions = { dateFormat: 'YMD', numberFormat: 'point', defaultCurrency: null, defaultQuantityUnit: null };
 const nothingStored = new Map<string, NcrFields>();
 
 function table(text: string) {
@@ -83,6 +83,7 @@ test('columns are matched to fields by header name, and unknown headers are left
     defectCategory: 4,
     description: 5,
     quantityAffected: 6,
+    quantityUnit: null,
     cost: 7,
     currency: 8,
     status: 9,
@@ -121,20 +122,82 @@ test('an import with no NCR ID column is blocked', () => {
   assert.match(blocked.blocking.join(' '), /NCR ID/);
 });
 
+test('a number format is detected only from values that can be read one way', () => {
+  assert.deepEqual(detectNumberFormat(['1,234.56']), { format: 'point', needed: true });
+  assert.deepEqual(detectNumberFormat(['1.234,56']), { format: 'comma', needed: true });
+  assert.deepEqual(detectNumberFormat(['12.5', '300']), { format: 'point', needed: true });
+  assert.deepEqual(detectNumberFormat(['12,50']), { format: 'comma', needed: true });
+  assert.deepEqual(detectNumberFormat(['1,234,567']), { format: 'point', needed: true });
+  // Four digits before the separator cannot be a thousands group, so it is a decimal.
+  assert.deepEqual(detectNumberFormat(['1234,567']), { format: 'comma', needed: true });
+  // 1,234 is 1234 in one format and 1.234 in the other.
+  assert.deepEqual(detectNumberFormat(['1,234', '5,000']), { format: null, needed: true });
+  assert.deepEqual(detectNumberFormat(['1.234']), { format: null, needed: true });
+  // A clear value settles it for the unclear ones beside it.
+  assert.deepEqual(detectNumberFormat(['1,234', '99.50']), { format: 'point', needed: true });
+  // Values that contradict each other settle nothing.
+  assert.deepEqual(detectNumberFormat(['12.50', '12,50']), { format: null, needed: true });
+  assert.deepEqual(detectNumberFormat(['12', '300', '']), { format: null, needed: false });
+});
+
+test('an ambiguous number format blocks the import, and the preview shows each reading', () => {
+  const text = 'NCR No;Qty;Cost\nN-1;1,234;1,500\n';
+  const undecided = plan(text, { numberFormat: null });
+  assert.equal(undecided.blocking.length, 1);
+  assert.match(undecided.blocking[0]!, /"1,234" could be read more than one way/);
+  assert.equal(undecided.rows[0]?.status, 'error');
+
+  const t = table(text);
+  const mapping = suggestMapping(t.headers);
+  const read = (numberFormat: 'point' | 'comma' | null) =>
+    numberExamples(t, mapping, { ...ISO, numberFormat }).map((e) => `${e.field} ${e.raw} -> ${e.read}`);
+  assert.deepEqual(read(null), ['quantityAffected 1,234 -> null', 'cost 1,500 -> null']);
+  assert.deepEqual(read('point'), ['quantityAffected 1,234 -> 1234', 'cost 1,500 -> 1500.00']);
+  // As a decimal comma, 1,500 is a cost with three decimals, which is not rounded, so it cannot be read.
+  assert.deepEqual(read('comma'), ['quantityAffected 1,234 -> 1.234', 'cost 1,500 -> null']);
+
+  // Under the comma reading 1,234 is a fraction, which a count of pieces cannot be.
+  assert.equal(plan(text, { numberFormat: 'point' }).rows[0]?.fields?.quantityAffected, 1234);
+  assert.equal(plan(text, { numberFormat: 'comma' }).rows[0]?.status, 'error');
+  // A file with no separators needs no choice.
+  assert.deepEqual(plan('NCR No,Qty,Cost\nN-1,12,300\n', { numberFormat: null }).blocking, []);
+  assert.equal(plan('NCR No,Qty,Cost\nN-1,12,300\n', { numberFormat: null }).rows[0]?.fields?.costCents, 30000);
+});
+
+test('a fractional quantity is accepted only with a recognised unit of measure', () => {
+  const quantity = (qty: string, unit: string, options: Partial<ImportOptions> = {}) =>
+    plan(`NCR No;Qty;Unit\nN-1;${qty};${unit}\n`, options).rows[0]!;
+  assert.deepEqual([quantity('2.5', 'kg').fields?.quantityAffected, quantity('2.5', 'kg').fields?.quantityUnit], [2.5, 'kg']);
+  assert.deepEqual([quantity('2.5', 'KG').fields?.quantityUnit, quantity('0.125', 'L').fields?.quantityAffected], ['kg', 0.125]);
+  assert.match(quantity('2.5', '').problems[0]!, /Pieces are counted whole/);
+  assert.match(quantity('2.5', 'pcs').problems[0]!, /Pieces are counted whole/);
+  assert.match(quantity('2.5', 'rolls').problems[0]!, /"rolls" is not a recognised unit of measure/);
+  assert.match(quantity('2.5555', 'kg').problems[0]!, /more than three decimal places/);
+  // Whole quantities are fine in any unit, and piece spellings all mean a count of pieces.
+  assert.deepEqual([quantity('3', 'rolls').fields?.quantityAffected, quantity('3', 'rolls').fields?.quantityUnit], [3, 'rolls']);
+  assert.equal(quantity('80', 'pcs').fields?.quantityUnit, null);
+  assert.equal(quantity('80.0', 'ea').fields?.quantityAffected, 80);
+  // A unit chosen for the whole file applies only to rows that state none.
+  assert.equal(plan('NCR No,Qty\nN-1,2.5\n', { defaultQuantityUnit: 'kg' }).rows[0]?.fields?.quantityUnit, 'kg');
+  assert.equal(quantity('4', 'm', { defaultQuantityUnit: 'kg' }).fields?.quantityUnit, 'm');
+  // A unit with no quantity is not kept.
+  assert.equal(quantity('', 'kg').fields?.quantityUnit, null);
+});
+
 // ---------- row-level validation ----------
 
 test('costs are read exactly into hundredths, in either decimal convention', () => {
-  const cost = (value: string, decimalSeparator: '.' | ',' = '.') =>
-    plan(`NCR No;Cost\nN-1;${value}\n`, { decimalSeparator }).rows[0]!;
+  const cost = (value: string, numberFormat: 'point' | 'comma' = 'point') =>
+    plan(`NCR No;Cost\nN-1;${value}\n`, { numberFormat }).rows[0]!;
   assert.equal(cost('1,234.56').fields?.costCents, 123456);
   assert.equal(cost('0.1').fields?.costCents, 10);
   assert.equal(cost('5').fields?.costCents, 500);
   assert.equal(cost('0').fields?.costCents, 0);
   assert.equal(cost('1 234.5').fields?.costCents, 123450);
-  assert.equal(cost('1.234,56', ',').fields?.costCents, 123456);
-  assert.equal(cost('12,5', ',').fields?.costCents, 1250);
+  assert.equal(cost('1.234,56', 'comma').fields?.costCents, 123456);
+  assert.equal(cost('12,5', 'comma').fields?.costCents, 1250);
   // 1.234 is "one thousand two hundred thirty-four" only where the comma is the decimal separator.
-  assert.equal(cost('1.234', ',').fields?.costCents, 123400);
+  assert.equal(cost('1.234', 'comma').fields?.costCents, 123400);
   assert.equal(cost('1.234').status, 'error');
   assert.match(cost('1.234').problems[0]!, /more than two decimal places/);
   assert.equal(cost('-5').status, 'error');
@@ -174,7 +237,9 @@ test('quantities must be whole numbers, and every problem in a row is reported',
   assert.equal(row.status, 'error');
   assert.equal(row.problems.length, 4);
   assert.equal(plan('NCR No,Qty\nN-1,1200\n').rows[0]?.fields?.quantityAffected, 1200);
-  assert.equal(plan('NCR No,Qty\nN-1,"1,200"\n').rows[0]?.status, 'error');
+  // With the format chosen, a thousands separator is read for what it is.
+  assert.equal(plan('NCR No,Qty\nN-1,"1,200"\n', { numberFormat: 'point' }).rows[0]?.fields?.quantityAffected, 1200);
+  assert.equal(plan('NCR No;Qty\nN-1;1.200\n', { numberFormat: 'comma' }).rows[0]?.fields?.quantityAffected, 1200);
 });
 
 test('empty cells become "not recorded", and text is kept as written', () => {
@@ -188,6 +253,7 @@ test('empty cells become "not recorded", and text is kept as written', () => {
     defectCategory: null,
     description: null,
     quantityAffected: null,
+    quantityUnit: null,
     costCents: null,
     currency: null,
     status: 'n/a',
@@ -245,7 +311,7 @@ test('totals over the importable example rows match figures added up by hand', (
   // Added up from the CSV by hand: USD 1250.00+687.50+300.00+0+95.25+50.00, EUR 2400.00+1180.40.
   assert.deepEqual(computeTotals(ready), {
     recordCount: 11,
-    quantityAffected: { sum: 896, recorded: 9, missing: 2 },
+    quantity: { groups: [{ unit: null, sum: 896, recorded: 9 }], recorded: 9, missing: 2 },
     cost: {
       groups: [
         { currency: 'EUR', sumCents: 358040, recorded: 2 },
@@ -256,15 +322,18 @@ test('totals over the importable example rows match figures added up by hand', (
       missing: 2,
     },
   });
-  assert.deepEqual(countByCategory(ready), [
-    { category: 'Dimensional', count: 3 },
-    { category: 'Material', count: 2 },
-    { category: 'Surface finish', count: 2 },
-    { category: 'Assembly', count: 1 },
-    { category: 'Documentation', count: 1 },
-    { category: 'Labeling', count: 1 },
-    { category: null, count: 1 },
-  ]);
+  assert.deepEqual(
+    computePareto(ready, 'count').series[0]?.rows.map((row) => [row.category, row.value]),
+    [
+      ['Dimensional', 3],
+      ['Material', 2],
+      ['Surface finish', 2],
+      ['Assembly', 1],
+      ['Documentation', 1],
+      ['Labeling', 1],
+      [null, 1],
+    ],
+  );
 });
 
 // ---------- duplicates against stored records ----------
@@ -293,7 +362,8 @@ test('a preview describes the import and stores nothing', async () => {
   assert.equal(preview.columns.length, 12);
   assert.equal(preview.examples[0], 'EX-NCR-0101');
   assert.equal(preview.mapping.reportedCause, 11);
-  assert.deepEqual(preview.detected, { dateFormat: 'YMD', decimalSeparator: '.' });
+  assert.deepEqual(preview.detected, { dateFormat: 'YMD', numberFormat: 'point', numberFormatNeeded: true });
+  assert.ok(preview.numberExamples.some((e) => e.field === 'cost' && e.raw === '1250.00' && e.read === '1250.00'));
   assert.equal(preview.summary.ready, 11);
   assert.equal(preview.skippedRows.length, 6);
   assert.equal(preview.readyRows.length, 11);

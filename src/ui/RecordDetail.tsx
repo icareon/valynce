@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { ImportBatch, NcrRecord } from '../core/ncr.ts';
 import { DemoTag, Icon, StatusBadge } from './bits.tsx';
-import { formatCost, formatWhole } from './format.ts';
+import { formatCost, formatQuantity, formatWhole } from './format.ts';
 
 const notRecorded = <span className="unknown-text">Not recorded</span>;
 
@@ -109,7 +109,9 @@ export function RecordDetail(props: { record: NcrRecord; batch: ImportBatch | un
             <Fact label="Defect category">{record.defectCategory}</Fact>
             <Fact label="Disposition">{record.disposition}</Fact>
             <Fact label="Affected quantity">
-              {record.quantityAffected === null ? null : formatWhole(record.quantityAffected)}
+              {record.quantityAffected === null
+                ? null
+                : `${formatQuantity(record.quantityAffected, record.quantityUnit)}${record.quantityUnit === null ? ' (count of pieces)' : ''}`}
             </Fact>
             <Fact label="Recorded cost">{costText(record)}</Fact>
           </dl>

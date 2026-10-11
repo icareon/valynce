@@ -3,12 +3,14 @@ import type { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { columnLabels, parseCsv } from '../core/csv.ts';
 import type { CsvTable } from '../core/csv.ts';
-import { isCurrencyCode } from '../core/ncr.ts';
+import { isCurrencyCode, readQuantityUnit } from '../core/ncr.ts';
 import type { NcrStorage } from '../core/storage.ts';
 import {
   detectDateFormat,
-  detectDecimalSeparator,
+  detectNumberFormat,
   IMPORT_FIELDS,
+  numberExamples,
+  numericValues,
   planImport,
   suggestMapping,
 } from '../modules/quality/importRules.ts';
@@ -60,25 +62,36 @@ function prepare(body: unknown, storage: NcrStorage): Prepared | string {
     }
   }
 
+  const numbers = detectNumberFormat(numericValues(table, mapping));
   const detected = {
     dateFormat: detectDateFormat(columnValues(table, mapping.openedOn)),
-    decimalSeparator: detectDecimalSeparator(columnValues(table, mapping.cost)),
+    numberFormat: numbers.format,
+    numberFormatNeeded: numbers.needed,
   };
 
   let options: ImportOptions;
   if (rawOptions === undefined) {
-    options = { ...detected, defaultCurrency: null };
+    options = { dateFormat: detected.dateFormat, numberFormat: detected.numberFormat, defaultCurrency: null, defaultQuantityUnit: null };
   } else {
     if (typeof rawOptions !== 'object' || rawOptions === null) return 'The import settings are not valid.';
-    const { dateFormat, decimalSeparator, defaultCurrency } = rawOptions as Record<string, unknown>;
+    const { dateFormat, numberFormat, defaultCurrency, defaultQuantityUnit } = rawOptions as Record<string, unknown>;
     if (dateFormat !== null && dateFormat !== 'YMD' && dateFormat !== 'DMY' && dateFormat !== 'MDY') {
       return 'The date format is not valid.';
     }
-    if (decimalSeparator !== '.' && decimalSeparator !== ',') return 'The decimal separator is not valid.';
+    if (numberFormat !== null && numberFormat !== 'point' && numberFormat !== 'comma') return 'The number format is not valid.';
+    if (defaultQuantityUnit !== null && (typeof defaultQuantityUnit !== 'string' || defaultQuantityUnit.trim() === '' || defaultQuantityUnit.length > 20)) {
+      return 'The quantity unit is not valid.';
+    }
     if (defaultCurrency !== null && !(typeof defaultCurrency === 'string' && isCurrencyCode(defaultCurrency))) {
       return 'The currency is not an ISO 4217 code such as USD or EUR.';
     }
-    options = { dateFormat, decimalSeparator, defaultCurrency };
+    options = {
+      dateFormat,
+      numberFormat,
+      defaultCurrency,
+      // Stored the way a unit read from the file would be, so both routes agree.
+      defaultQuantityUnit: defaultQuantityUnit === null ? null : readQuantityUnit(defaultQuantityUnit).unit,
+    };
   }
 
   const stored = new Map(storage.list().map((record) => [record.ncrNumber, record]));
@@ -119,6 +132,7 @@ export function registerImportRoutes(app: Hono, storage: NcrStorage): void {
       mapping: prepared.mapping,
       options: prepared.options,
       detected: prepared.detected,
+      numberExamples: numberExamples(table, prepared.mapping, prepared.options),
       blocking: plan.blocking,
       summary: plan.summary,
       costWithoutCurrency: plan.costWithoutCurrency,

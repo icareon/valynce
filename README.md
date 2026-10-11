@@ -2,7 +2,9 @@
 
 Valynce is a local-first quality tool. It runs on your own machine, with a browser interface on top of a local backend, and applies rules and AI-assisted analysis to non-conformance reports (NCRs).
 
-> **Status:** Week 1, increment 2 of 6. The app shows an overview, a category chart and a searchable records table, and imports CSV files with column mapping and row-by-row checks. Pareto analysis, AI summary, export and the `npx` launcher are not built yet.
+> **Status:** Week 1, increment 3 of 6. The app ranks defect categories by report count, affected quantity or recorded cost (Pareto analysis), lists and filters the reports, and imports CSV files with row-by-row checks. AI summary, record export and the `npx` launcher are not built yet.
+
+![Overview in the light theme](docs/screenshots/overview-light.png)
 
 ## Try it
 
@@ -26,29 +28,52 @@ For development, `npm run dev` runs the backend with reload and the interface at
 | `npm run build` | Builds into `dist` |
 | `npm start` | Serves the built app |
 | `npm run check:browser` | Drives the built app in headless Chrome and writes screenshots |
+| `npm run demo:record` | Records the 20-second Pareto demo to `demo/out/` |
 
 ## What the numbers mean
 
 Valynce shows three different metrics and keeps them apart:
 
 - **NCR reports**: the number of reports. Each counts once, however many units it covers.
-- **Affected units**: units, summed over the reports that state a quantity.
+- **Affected quantity**: the quantity affected, summed over the reports that state one. With no unit it is a count of pieces.
 - **Recorded cost**: the cost written on the reports, summed over those that state one. It is not an estimate of total cost of poor quality.
 
 Each card says how many reports had a value, for example "Quantity recorded in 21 of 24 reports."
 
 - A value that was not recorded is shown as "—" or "Not recorded". It is never treated as zero.
 - Costs carry a currency. A cost with no stated currency is shown as "Currency unspecified" and is never assumed to be dollars.
-- Amounts in different currencies are never added together; each currency gets its own total.
-- The chart "NCR reports by category" counts reports, including an "Uncategorized" bucket, so the bars always add up to the number of reports shown.
+- Amounts in different currencies, and quantities in different units, are never added together; each gets its own total.
 - The cause on a report is shown as the *reported* cause. Valynce does not claim it is a verified root cause.
+
+## Pareto analysis
+
+The Overview ranks defect categories from largest to smallest by one metric at a time. Switch between **NCR reports**, **Affected quantity** and **Recorded cost** to see how the priority changes: the category with the most reports is often not the one with the most units or the most cost.
+
+![Recorded cost by category, with one category selected](docs/screenshots/pareto-cost-light.png)
+
+- **Bars** show each category's share of the total. **The line** shows the cumulative share on the same 0 to 100% scale.
+- **One unit at a time.** Costs in different currencies and quantities in different units cannot be added, so each gets its own ranking, chosen with the buttons beside the metric.
+- **Coverage is stated.** The line under the title says how many reports have a value for the metric. Reports with none are left out of the ranking and are never counted as zero.
+- **One population.** The chart, the table under it and **Export CSV** all cover the same reports: those matching the search and status filter.
+- **Select a category** to list its reports below. The readout says how many of them contribute to the bar.
+- **Not a cause.** The ranking shows where reports, quantity or cost are recorded. It does not show why, and the leading category is not a verified root cause.
+
+`fixtures/pareto-check.csv` is a ten-row synthetic file small enough to check by hand, in which each metric puts a different category first. `npm run build && npm run demo:record` records a 20-second video of it to `demo/out/`.
+
+## Light and dark themes
+
+The button at the top right switches theme. Light is the default; the choice is remembered on this computer.
+
+![Overview in the dark theme](docs/screenshots/overview-dark.png)
 
 ## Importing a CSV file
 
 Open **Import**, choose a CSV file, check the column matching, and import. To try it, use the synthetic example in `fixtures/ncr-import-example.csv`: 18 rows, of which 11 import and 7 are deliberately wrong in different ways.
 
 - **Column mapping.** Valynce matches columns it recognises by header name. You can change any of them, and only the NCR ID is required.
-- **No guessing.** A date such as 03/04/2026 could be March or April, so you are asked how dates are written. An amount with a currency symbol, more than two decimals or a fraction of a unit is rejected, not adjusted.
+- **No guessing.** A date such as 03/04/2026 could be March or April, and a number such as 1,234 could be 1234 or 1.234. When the file does not settle it, you choose, and the preview shows how each number will be read before anything is stored.
+- **Exact values.** An amount with a currency symbol or more than two decimals is rejected, not adjusted.
+- **Units.** A quantity with no unit is a whole count of pieces. A fractional quantity is accepted only with a unit of measure such as kg, from a unit column or the import settings.
 - **Row-by-row results.** Before anything is stored you see which rows will be imported and, for every other row, its row number and the reason.
 - **Duplicates.** A row whose NCR ID is already stored, or appeared earlier in the same file, is skipped and reported. Stored records are never overwritten, so importing the same file twice adds nothing.
 - **Traceability.** Each imported report keeps the file name, the row it came from and that row's original cells. Open a record to see them.

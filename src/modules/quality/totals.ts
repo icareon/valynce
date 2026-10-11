@@ -1,8 +1,16 @@
+import { toMilli } from '../../core/ncr.ts';
 import type { NcrFields } from '../../core/ncr.ts';
 
-/** A sum over the records that have a value, with the count of those that do not. */
-export interface MetricTotal {
+/** Affected quantity in one unit. A null unit is a count of pieces. */
+export interface QuantityGroup {
+  unit: string | null;
   sum: number;
+  recorded: number;
+}
+
+export interface QuantityTotal {
+  /** One total per unit, never added together. Piece counts first, then units by name. */
+  groups: QuantityGroup[];
   recorded: number;
   missing: number;
 }
@@ -24,51 +32,56 @@ export interface CostTotal {
 export interface NcrTotals {
   /** Number of NCRs. Each report counts once, whatever its quantity or cost. */
   recordCount: number;
-  /** Units affected, summed over records that state a quantity. */
-  quantityAffected: MetricTotal;
+  /** Affected quantity, summed per unit over records that state a quantity. */
+  quantity: QuantityTotal;
   /** Recorded cost, summed per currency over records that state a cost. */
   cost: CostTotal;
 }
 
-type TotalsInput = Pick<NcrFields, 'quantityAffected' | 'costCents' | 'currency'>;
+type TotalsInput = Pick<NcrFields, 'quantityAffected' | 'quantityUnit' | 'costCents' | 'currency'>;
 
 /**
  * A missing quantity or cost is counted as missing. It is not treated as zero,
  * so a total is always "the sum of what was recorded" plus how much is unknown.
- * Costs in different currencies, or with no stated currency, are kept apart.
+ * Quantities in different units, and costs in different or unstated currencies,
+ * are kept apart. Sums are made in whole thousandths and hundredths, so they are exact.
  */
 export function computeTotals(records: readonly TotalsInput[]): NcrTotals {
-  const quantityAffected: MetricTotal = { sum: 0, recorded: 0, missing: 0 };
-  const groups = new Map<string | null, CostGroup>();
+  const quantities = new Map<string | null, { milli: number; recorded: number }>();
+  const costs = new Map<string | null, CostGroup>();
+  let quantityMissing = 0;
   let costMissing = 0;
 
   for (const r of records) {
     if (r.quantityAffected === null) {
-      quantityAffected.missing += 1;
+      quantityMissing += 1;
     } else {
-      quantityAffected.sum += r.quantityAffected;
-      quantityAffected.recorded += 1;
+      const group = quantities.get(r.quantityUnit) ?? { milli: 0, recorded: 0 };
+      group.milli += toMilli(r.quantityAffected) ?? 0;
+      group.recorded += 1;
+      quantities.set(r.quantityUnit, group);
     }
 
     if (r.costCents === null) {
       costMissing += 1;
     } else {
-      const group = groups.get(r.currency) ?? { currency: r.currency, sumCents: 0, recorded: 0 };
+      const group = costs.get(r.currency) ?? { currency: r.currency, sumCents: 0, recorded: 0 };
       group.sumCents += r.costCents;
       group.recorded += 1;
-      groups.set(r.currency, group);
+      costs.set(r.currency, group);
     }
   }
 
-  const sorted = [...groups.values()].sort((a, b) => {
-    if (a.currency === null) return 1;
-    if (b.currency === null) return -1;
-    return a.currency.localeCompare(b.currency);
-  });
+  const quantityGroups = [...quantities.entries()]
+    .map(([unit, group]) => ({ unit, sum: group.milli / 1000, recorded: group.recorded }))
+    .sort((a, b) => (a.unit === null ? -1 : b.unit === null ? 1 : a.unit.localeCompare(b.unit)));
+  const costGroups = [...costs.values()].sort((a, b) =>
+    a.currency === null ? 1 : b.currency === null ? -1 : a.currency.localeCompare(b.currency),
+  );
 
   return {
     recordCount: records.length,
-    quantityAffected,
-    cost: { groups: sorted, recorded: records.length - costMissing, missing: costMissing },
+    quantity: { groups: quantityGroups, recorded: records.length - quantityMissing, missing: quantityMissing },
+    cost: { groups: costGroups, recorded: records.length - costMissing, missing: costMissing },
   };
 }

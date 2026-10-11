@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { parseNcrFields } from '../src/core/ncr.ts';
+import { parseNcrFields, readQuantityUnit } from '../src/core/ncr.ts';
 import type { NcrFields } from '../src/core/ncr.ts';
 import { resolveDataDir } from '../src/core/paths.ts';
 import { NcrStorage } from '../src/core/storage.ts';
@@ -18,6 +18,7 @@ function ncr(ncrNumber: string, overrides: Partial<NcrFields> = {}): NcrFields {
     defectCategory: 'Dimensional',
     description: null,
     quantityAffected: 4,
+    quantityUnit: null,
     costCents: 1250,
     currency: null,
     status: 'Open',
@@ -111,6 +112,44 @@ test('a currency is kept only when it is a real code, and is never assumed', () 
   assert.ok(!parseNcrFields({ ncrNumber: 'N-3', costCents: 500, currency: 'XYZ' }).ok);
 });
 
+test('a count of pieces must be whole, and a fraction needs a unit of measure', () => {
+  const pieces = parseNcrFields({ ncrNumber: 'N-1', quantityAffected: 12 });
+  assert.ok(pieces.ok);
+  assert.equal(pieces.value.quantityUnit, null);
+  assert.ok(!parseNcrFields({ ncrNumber: 'N-1', quantityAffected: 12.5 }).ok);
+  assert.ok(!parseNcrFields({ ncrNumber: 'N-1', quantityAffected: 12.5, quantityUnit: 'pcs' }).ok);
+  assert.ok(!parseNcrFields({ ncrNumber: 'N-1', quantityAffected: 12.5, quantityUnit: 'rolls' }).ok);
+  const measured = parseNcrFields({ ncrNumber: 'N-1', quantityAffected: 12.5, quantityUnit: 'KG' });
+  assert.ok(measured.ok);
+  assert.equal(measured.value.quantityAffected, 12.5);
+  assert.equal(measured.value.quantityUnit, 'kg');
+  assert.ok(!parseNcrFields({ ncrNumber: 'N-1', quantityAffected: 0.1234, quantityUnit: 'kg' }).ok);
+  // A unit with no quantity means nothing and is not kept.
+  const unitOnly = parseNcrFields({ ncrNumber: 'N-1', quantityUnit: 'kg' });
+  assert.ok(unitOnly.ok);
+  assert.equal(unitOnly.value.quantityUnit, null);
+});
+
+test('units are read as pieces, a known measure, or kept as written', () => {
+  for (const pieces of ['', '  ', 'pcs', 'PCS', 'ea', 'Each', 'pc.', 'units']) {
+    assert.deepEqual(readQuantityUnit(pieces), { unit: null, fractional: false });
+  }
+  assert.deepEqual(readQuantityUnit('Kg'), { unit: 'kg', fractional: true });
+  assert.deepEqual(readQuantityUnit('ml'), { unit: 'mL', fractional: true });
+  assert.deepEqual(readQuantityUnit('m2'), { unit: 'm²', fractional: true });
+  assert.deepEqual(readQuantityUnit('rolls'), { unit: 'rolls', fractional: false });
+});
+
+test('a fractional quantity and its unit survive storage exactly', () => {
+  const storage = new NcrStorage(':memory:');
+  storage.insertMany([ncr('N-1', { quantityAffected: 2.5, quantityUnit: 'kg' }), ncr('N-2', { quantityAffected: 0.001, quantityUnit: 'kg' })], 'import');
+  const stored = new Map(storage.list().map((r) => [r.ncrNumber, r]));
+  assert.equal(stored.get('N-1')?.quantityAffected, 2.5);
+  assert.equal(stored.get('N-1')?.quantityUnit, 'kg');
+  assert.equal(stored.get('N-2')?.quantityAffected, 0.001);
+  storage.close();
+});
+
 test('opening an older database keeps every record, backs it up and does not invent a currency', () => {
   const dir = mkdtempSync(join(tmpdir(), 'valynce-test-'));
   try {
@@ -140,6 +179,10 @@ test('opening an older database keeps every record, backs it up and does not inv
     // A real record's cost is unchanged and its currency stays unspecified.
     assert.equal(byNumber.get('REAL-1')?.costCents, 12345);
     assert.equal(byNumber.get('REAL-1')?.quantityAffected, 7);
+    // An old quantity was a whole count of pieces; it keeps its value and gains no unit.
+    assert.equal(byNumber.get('REAL-1')?.quantityUnit, null);
+    assert.equal(byNumber.get('REAL-2')?.quantityAffected, null);
+    assert.equal(byNumber.get('SYN-NCR-0001')?.quantityAffected, 40);
     assert.equal(byNumber.get('REAL-1')?.currency, null);
     assert.equal(byNumber.get('REAL-2')?.costCents, null);
     // Records from before imports were tracked have no source, and none is made up.
