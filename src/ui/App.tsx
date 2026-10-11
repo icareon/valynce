@@ -23,7 +23,8 @@ function Cell({ value }: { value: string | null }) {
 }
 
 function missingNote(total: MetricTotal, what: string): string {
-  if (total.missing === 0) return `All ${total.recorded} records state ${what}.`;
+  if (total.recorded + total.missing === 0) return 'No records yet.';
+  if (total.missing === 0) return `All ${total.recorded} records state a ${what}.`;
   const records = total.missing === 1 ? 'record has' : 'records have';
   return `${total.missing} ${records} no ${what} and ${total.missing === 1 ? 'is' : 'are'} not in this sum.`;
 }
@@ -116,9 +117,11 @@ export function App() {
   return (
     <div className="page">
       <header className="masthead">
+        <p className="eyebrow">NCR analyzer · Runs locally</p>
         <h1>Valynce</h1>
-        <p>NCR analyzer. Records are stored on this computer and are not sent anywhere.</p>
+        <p>Records are stored on this computer and are not sent anywhere.</p>
       </header>
+      <div className="divider" />
 
       {error !== null && (
         <p className="banner banner-error" role="alert">

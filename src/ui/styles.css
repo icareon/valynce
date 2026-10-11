@@ -1,33 +1,28 @@
+/* Palette, type and shapes follow paulshahidi.com: dark navy surfaces, a steel-blue
+   signal colour, Inter for text and IBM Plex Mono for labels and figures. */
 :root {
-  color-scheme: light dark;
-  --bg: #f6f7f9;
-  --surface: #ffffff;
-  --text: #16191d;
-  --muted: #5b6470;
-  --line: #dde1e6;
-  --accent: #1f5fbf;
-  --notice-bg: #fff6d9;
-  --notice-line: #e2c766;
-  --error-bg: #fde8e8;
-  --error-line: #e08a8a;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: dark;
+  --surface: #0c1017;
+  --surface-elevated: #131a24;
+  --border-subtle: #161f2b;
+  --border: #1e2a38;
+  --border-strong: #2a3d52;
+  --primary: #e0e4e8;
+  --accent: #9ca7b4;
+  --muted: #6b7a8d;
+  --signal: #7a9bbd;
+  --signal-wash: #7a9bbd1f;
+  --signal-line: #7a9bbd4d;
+  --alert: #d99a94;
+  --alert-wash: #d99a941f;
+  --alert-line: #d99a944d;
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  font-family: var(--font-sans);
   font-size: 15px;
-  line-height: 1.45;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14171b;
-    --surface: #1c2026;
-    --text: #e7eaee;
-    --muted: #9aa4b1;
-    --line: #2f353d;
-    --accent: #7fb0ff;
-    --notice-bg: #3a3214;
-    --notice-line: #7a6a26;
-    --error-bg: #3d1c1c;
-    --error-line: #8a4040;
-  }
+  line-height: 1.5;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 
 * {
@@ -36,25 +31,83 @@
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--surface);
+  color: var(--primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--signal-line);
+}
+
+:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
 }
 
 .page {
+  position: relative;
   max-width: 1500px;
   margin: 0 auto;
-  padding: 24px 20px 48px;
+  padding: 0 24px 64px;
+}
+
+/* The faint 64px grid from the site, fading out below the masthead. */
+.page::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 320px;
+  background-image:
+    linear-gradient(#ffffff08 1px, transparent 1px), linear-gradient(90deg, #ffffff08 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: linear-gradient(#000, transparent);
+  pointer-events: none;
+}
+
+.page > * {
+  position: relative;
+}
+
+.masthead {
+  padding: 48px 0 28px;
+}
+
+.eyebrow,
+.tile-label,
+thead th,
+.tag,
+button {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  font-size: 0.75rem;
+  color: var(--signal);
 }
 
 .masthead h1 {
   margin: 0;
-  font-size: 1.5rem;
-  letter-spacing: -0.01em;
+  font-size: 2.5rem;
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
 }
 
-.masthead p {
-  margin: 2px 0 20px;
-  color: var(--muted);
+.masthead p:last-child {
+  max-width: 60ch;
+  margin: 12px 0 0;
+  color: var(--accent);
+}
+
+.divider {
+  height: 1px;
+  margin-bottom: 28px;
+  background: linear-gradient(90deg, transparent, var(--border) 20% 80%, transparent);
 }
 
 .banner {
@@ -64,79 +117,91 @@ body {
   justify-content: space-between;
   gap: 12px;
   margin: 0 0 16px;
-  padding: 10px 14px;
-  background: var(--notice-bg);
-  border: 1px solid var(--notice-line);
-  border-radius: 8px;
+  padding: 12px 16px;
+  background: var(--signal-wash);
+  border: 1px solid var(--signal-line);
+  border-radius: 4px;
+  color: var(--accent);
 }
 
 .banner p {
   margin: 0;
 }
 
+.banner strong {
+  font-weight: 500;
+  color: var(--primary);
+}
+
 .banner-error {
-  background: var(--error-bg);
-  border-color: var(--error-line);
+  background: var(--alert-wash);
+  border-color: var(--alert-line);
+  color: var(--alert);
 }
 
 button {
-  font: inherit;
-  padding: 6px 12px;
-  color: var(--text);
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 6px;
+  padding: 8px 14px;
+  font-size: 0.72rem;
+  color: var(--primary);
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
   cursor: pointer;
+  transition:
+    border-color 0.2s,
+    color 0.2s;
 }
 
 button:hover:not(:disabled) {
-  border-color: var(--accent);
+  color: #fff;
+  border-color: var(--signal);
 }
 
 button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: default;
 }
 
 .tiles {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 12px;
+  gap: 16px;
   margin-bottom: 16px;
 }
 
 .tile {
-  padding: 14px 16px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  padding: 20px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
 }
 
 .tile-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 0.72rem;
   color: var(--muted);
 }
 
 .tile-value {
-  margin: 2px 0 4px;
-  font-size: 1.8rem;
-  font-weight: 600;
+  margin: 10px 0 8px;
+  font-size: 2.25rem;
+  font-weight: 300;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
   font-variant-numeric: tabular-nums;
 }
 
 .tile-note {
   font-size: 0.85rem;
-  color: var(--muted);
+  color: var(--accent);
 }
 
 .table-scroll {
   overflow-x: auto;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
 }
 
 table {
@@ -147,24 +212,38 @@ table {
 
 th,
 td {
-  padding: 8px 12px;
+  padding: 10px 14px;
   text-align: left;
   vertical-align: top;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+td {
+  color: var(--accent);
 }
 
 thead th {
-  font-size: 0.78rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  font-size: 0.68rem;
+  font-weight: 400;
   color: var(--muted);
   white-space: nowrap;
+  border-bottom-color: var(--border);
 }
 
 tbody th {
-  font-weight: 600;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--primary);
   white-space: nowrap;
+}
+
+tbody tr {
+  transition: background-color 0.2s;
+}
+
+tbody tr:hover {
+  background: #ffffff08;
 }
 
 tbody tr:last-child th,
@@ -174,8 +253,13 @@ tbody tr:last-child td {
 
 .num {
   text-align: right;
-  font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+td.num {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--primary);
 }
 
 .nowrap {
@@ -184,28 +268,31 @@ tbody tr:last-child td {
 
 .wide {
   min-width: 220px;
+  color: var(--primary);
 }
 
-.missing {
+.missing,
+td .missing {
   color: var(--muted);
 }
 
 .tag {
-  margin-left: 8px;
+  margin-left: 10px;
   padding: 1px 6px;
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 400;
+  color: var(--signal);
+  border: 1px solid var(--signal-line);
+  border-radius: 4px;
 }
 
 .empty {
-  padding: 40px 16px;
+  padding: 56px 16px;
   text-align: center;
-  background: var(--surface);
-  border: 1px dashed var(--line);
-  border-radius: 8px;
+  color: var(--accent);
+  background: var(--surface-elevated);
+  border: 1px dashed var(--border-strong);
+  border-radius: 4px;
 }
 
 .visually-hidden {
