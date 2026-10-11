@@ -1,0 +1,74 @@
+# Dependencies and build output
+node_modules/
+dist/
+build/
+out/
+coverage/
+*.tsbuildinfo
+
+# Customer data and runtime data
+data/
+customer-data/
+uploads/
+exports/
+imports/
+
+# Local databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.duckdb
+*.duckdb.wal
+*.mdb
+*.dump
+*.sql.gz
+*.bak
+
+# Credentials and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+id_rsa*
+id_ed25519*
+credentials*.json
+service-account*.json
+secrets.*
+.secrets/
+.npmrc
+.netrc
+
+# Generated demo files (Remotion renders and caches)
+demo/out/
+demo/build/
+demo/.remotion/
+demo/**/*.mp4
+demo/**/*.mov
+demo/**/*.webm
+demo/**/*.gif
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS and editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Local agent settings
+.claude/settings.local.json
