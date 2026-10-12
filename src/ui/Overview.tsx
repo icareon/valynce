@@ -10,7 +10,7 @@ function Metric(props: { label: string; value: ReactNode; coverage: string; help
   const [open, setOpen] = useState(false);
   const helpId = useId();
   return (
-    <article className="card metric">
+    <article className="metric">
       <div className="metric-head">
         <h2 className="metric-label">{props.label}</h2>
         <button
@@ -33,14 +33,15 @@ function Metric(props: { label: string; value: ReactNode; coverage: string; help
   );
 }
 
-/** Several totals that cannot be added: one line each, never a combined figure. */
-function Groups({ items }: { items: { key: string; amount: string; of: string }[] }) {
+/** Several totals that cannot be added: one compact row each, never a combined figure. */
+function Groups({ items }: { items: { key: string; amount: string; unit: string; reports: number }[] }) {
   return (
     <ul className="metric-groups">
       {items.map((item) => (
         <li key={item.key}>
           <span className="amount">{item.amount}</span>
-          <span className="of">{item.of}</span>
+          <span className="unit">{item.unit}</span>
+          <span className="count">{plural(item.reports, 'report')}</span>
         </li>
       ))}
     </ul>
@@ -62,8 +63,9 @@ function QuantityValue({ totals }: { totals: NcrTotals }) {
     <Groups
       items={groups.map((group) => ({
         key: group.unit ?? 'pieces',
-        amount: formatQuantity(group.sum, group.unit),
-        of: `${group.unit === null ? 'units' : group.unit} · ${plural(group.recorded, 'report')}`,
+        amount: formatQuantity(group.sum, null),
+        unit: group.unit ?? 'units',
+        reports: group.recorded,
       }))}
     />
   );
@@ -92,7 +94,8 @@ function CostValue({ totals }: { totals: NcrTotals }) {
       items={groups.map((group) => ({
         key: group.currency ?? 'unspecified',
         amount: formatCost(group.sumCents, group.currency),
-        of: `${group.currency ?? 'Currency unspecified'} · ${plural(group.recorded, 'report')}`,
+        unit: group.currency ?? 'Currency unspecified',
+        reports: group.recorded,
       }))}
     />
   );
@@ -105,25 +108,19 @@ export function MetricCards({ totals, categorized }: { totals: NcrTotals; catego
       <Metric
         label="NCR reports"
         value={<div className="metric-value">{formatWhole(n)}</div>}
-        coverage={`Category recorded in ${formatWhole(categorized)} of ${formatWhole(n)} reports.`}
-        help="The number of non-conformance reports stored. Each report counts once, however many units it covers."
+        coverage={`Category in ${formatWhole(categorized)} of ${formatWhole(n)} reports`}
+        help="The number of non-conformance reports stored. Each report counts once, however many units it covers. The line above says how many of them state a defect category."
       />
       <Metric
         label="Affected quantity"
         value={<QuantityValue totals={totals} />}
-        coverage={
-          `Quantity recorded in ${formatWhole(totals.quantity.recorded)} of ${formatWhole(n)} reports.` +
-          (totals.quantity.groups.length > 1 ? ' Units are not combined.' : '')
-        }
+        coverage={`Quantity in ${formatWhole(totals.quantity.recorded)} of ${formatWhole(n)} reports`}
         help="The quantity the reports say was affected, added up. With no unit it is a count of pieces. A report with no quantity is left out of the sum; it is not counted as zero. Quantities in different units are never added together."
       />
       <Metric
         label="Recorded cost"
         value={<CostValue totals={totals} />}
-        coverage={
-          `Cost recorded in ${formatWhole(totals.cost.recorded)} of ${formatWhole(n)} reports.` +
-          (totals.cost.groups.length > 1 ? ' Currencies are not combined.' : '')
-        }
+        coverage={`Cost in ${formatWhole(totals.cost.recorded)} of ${formatWhole(n)} reports`}
         help="Cost as written on the reports, added up per currency. It is not an estimate of the total cost of poor quality. A report with no cost is left out of the sum, and amounts in different or unstated currencies are never added together."
       />
     </section>

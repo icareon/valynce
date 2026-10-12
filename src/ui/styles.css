@@ -4,13 +4,11 @@
   box-sizing: border-box;
 }
 
-html,
-body,
-#root {
-  height: 100%;
-}
-
+/* The document is the only vertical scroll container. Nothing below sets a
+   fixed height or its own vertical overflow, except the detail panel. */
 body {
+  min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
   background: var(--bg);
   color: var(--text);
@@ -81,13 +79,17 @@ thead th,
 
 .app {
   display: grid;
-  grid-template: var(--appbar-h) minmax(0, 1fr) / var(--rail-w) minmax(0, 1fr);
+  grid-template: var(--appbar-h) 1fr / var(--rail-w) minmax(0, 1fr);
   grid-template-areas: 'bar bar' 'rail main';
-  height: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .appbar {
   grid-area: bar;
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -158,6 +160,13 @@ thead th,
 
 .rail {
   grid-area: rail;
+  /* Stays in view while the page scrolls. It is exactly as tall as the space
+     under the app bar, so it never makes the page taller than its content. */
+  position: sticky;
+  top: var(--appbar-h);
+  align-self: start;
+  height: calc(100vh - var(--appbar-h));
+  height: calc(100dvh - var(--appbar-h));
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -205,15 +214,12 @@ thead th,
 .main {
   grid-area: main;
   min-width: 0;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-strong) transparent;
 }
 
 .view {
   max-width: 1320px;
   margin: 0 auto;
-  padding: var(--space-6) var(--space-6) var(--space-7);
+  padding: var(--space-5) var(--space-6) var(--space-7);
 }
 
 .app.has-detail .view {
@@ -226,7 +232,7 @@ thead th,
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--space-3) var(--space-4);
-  margin-bottom: var(--space-5);
+  margin-bottom: var(--space-4);
 }
 
 .page-head h1 {
@@ -507,15 +513,25 @@ select.field {
   padding: var(--space-4);
 }
 
+/* One compact row of three cells. Each cell draws a divider into the 1px gap on
+   its right and below it, so the lines are right however the cells wrap, and an
+   unfilled corner stays plain panel. Height comes from the content alone. */
 .metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--space-4);
-  margin-bottom: var(--space-5);
+  gap: 1px;
+  overflow: clip;
+  margin-bottom: var(--space-4);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
 }
 
 .metric {
   padding: var(--space-4);
+  box-shadow:
+    1px 0 0 var(--border),
+    0 1px 0 var(--border);
 }
 
 .metric-head {
@@ -523,7 +539,13 @@ select.field {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  margin: -4px -6px 0 0;
+  height: 20px;
+}
+
+.metric-head .icon-btn {
+  width: 22px;
+  height: 22px;
+  margin-right: -4px;
 }
 
 .metric-label {
@@ -532,7 +554,7 @@ select.field {
 }
 
 .metric-value {
-  margin-top: var(--space-1);
+  margin-top: 6px;
   font-size: var(--text-metric);
   font-weight: 600;
   line-height: 1.2;
@@ -545,37 +567,50 @@ select.field {
   vertical-align: 6px;
 }
 
+/* Several totals that cannot be added: one compact row each, as amount, unit and report count. */
 .metric-groups {
   display: grid;
-  gap: 2px;
-  margin: var(--space-2) 0 0;
+  grid-template-columns: auto auto 1fr;
+  align-items: baseline;
+  gap: 0 var(--space-2);
+  margin: 6px 0 0;
   padding: 0;
   list-style: none;
 }
 
 .metric-groups li {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
   align-items: baseline;
-  gap: var(--space-2);
+  line-height: 24px;
 }
 
 .metric-groups .amount {
-  font-size: var(--text-xl);
+  font-size: var(--text-lg);
   font-weight: 600;
-  letter-spacing: -0.015em;
   font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 
-.metric-groups .of {
+.metric-groups .unit {
+  color: var(--text-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.metric-groups .count {
   color: var(--text-3);
   font-size: var(--text-xs);
+  text-align: right;
 }
 
 .metric-coverage {
   margin-top: var(--space-2);
   color: var(--text-3);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
 }
 
 .metric-help,
@@ -598,7 +633,7 @@ select.field {
   --p-pad: var(--space-2);
   --p-row: 32px;
   container-type: inline-size;
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-5);
   padding: var(--space-4);
 }
 
@@ -914,7 +949,8 @@ select.field {
   white-space: nowrap;
 }
 
-/* clip, not hidden: a hidden overflow would stop the header from sticking to the page scroll. */
+/* clip, not hidden: a hidden overflow would make this a scroll container and stop
+   the header from sticking to the page scroll. The table grows with its rows. */
 .table-wrap {
   container-type: inline-size;
   overflow: clip;
@@ -942,8 +978,9 @@ td {
 }
 
 thead th {
+  /* Sticks just under the app bar as the page scrolls. */
   position: sticky;
-  top: 0;
+  top: var(--appbar-h);
   z-index: 1;
   height: 32px;
   color: var(--text-3);
@@ -1526,7 +1563,7 @@ td.actions .btn + .btn {
   }
 
   .view {
-    padding: var(--space-5) var(--space-5) var(--space-6);
+    padding: var(--space-4) var(--space-5) var(--space-6);
   }
 }
 
@@ -1546,11 +1583,13 @@ td.actions .btn + .btn {
 
 @media (max-width: 640px) {
   .app {
-    grid-template: var(--appbar-h) auto minmax(0, 1fr) / minmax(0, 1fr);
+    grid-template: var(--appbar-h) auto 1fr / minmax(0, 1fr);
     grid-template-areas: 'bar' 'rail' 'main';
   }
 
   .rail {
+    position: static;
+    height: auto;
     flex-direction: row;
     padding: var(--space-2);
     border-right: 0;

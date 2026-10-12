@@ -176,6 +176,13 @@ async function upload(selector, path) {
   await cdp('DOM.setFileInputFiles', { nodeId, files: [path] });
 }
 
+// A real wheel event at a point on the page, as a mouse or trackpad would send.
+async function wheel(x, y, deltaY) {
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseWheel', x, y, deltaX: 0, deltaY });
+  await sleep(250);
+}
+
 async function viewport(width, height) {
   await cdp('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
   await sleep(250);
@@ -249,6 +256,54 @@ const CONTRAST = `(() => {
   }
   return [...weak];
 })()`;
+
+// Who scrolls, and how tall the document is compared with what is in it.
+const SCROLL = `(() => {
+  const de = document.documentElement;
+  const view = $('.view');
+  const nested = $$('.app *').filter((el) => {
+    const style = getComputedStyle(el);
+    return /(auto|scroll)/.test(style.overflowY) && el.scrollHeight > el.clientHeight + 1 && el.getClientRects().length > 0 && !el.closest('.detail');
+  }).map((el) => String(el.className || el.tagName));
+  const point = (el, dy) => { if (!el) return null; const b = el.getBoundingClientRect(); return [Math.round(b.left + b.width / 2), Math.round(Math.min(Math.max(b.top + dy, 60), innerHeight - 30))]; };
+  return {
+    doc: de.scrollHeight, viewport: innerHeight, y: Math.round(scrollY), max: de.scrollHeight - innerHeight,
+    contentBottom: Math.round(view.getBoundingClientRect().bottom + scrollY),
+    appbar: [Math.round($('.appbar').getBoundingClientRect().top), getComputedStyle($('.appbar')).position],
+    // On wide screens the rail stays under the app bar; on a phone it is a normal row that scrolls away.
+    railOffset: getComputedStyle($('.rail')).position === 'sticky' ? Math.round($('.rail').getBoundingClientRect().top - $('.appbar').getBoundingClientRect().bottom) : 0,
+    hiddenImportHeight: $('.import-view').hidden ? $('.import-view').getBoundingClientRect().height : 0,
+    nested,
+    points: { chart: point($('.pareto'), 120), table: point($$('.table-wrap').find((t) => t.getClientRects().length > 0), 30), sidebar: [28, 420], background: [innerWidth - 6, 300], detail: point($('.detail'), 300) },
+  };
+})()`;
+
+/**
+ * The document must be the only thing that scrolls vertically, be exactly as
+ * tall as its content, and scroll the same way wherever the pointer is.
+ */
+async function scrollModel(name) {
+  await page(`(scrollTo(0, 0), 0)`);
+  await sleep(120);
+  const start = await page(SCROLL);
+  check(`${name}: only the page scrolls vertically`, start.nested.length === 0, start.nested.join(', '));
+  check(`${name}: the page is exactly as tall as its content, with no blank region`, Math.abs(start.doc - Math.max(start.viewport, start.contentBottom)) <= 1 && start.hiddenImportHeight === 0, JSON.stringify({ doc: start.doc, viewport: start.viewport, contentBottom: start.contentBottom, hiddenImport: start.hiddenImportHeight }));
+  const results = [];
+  for (const [where, at] of Object.entries(start.points)) {
+    if (at === null || at[0] > start.viewport * 3) continue;
+    await page(`(scrollTo(0, 0), 0)`);
+    await sleep(80);
+    for (let i = 0; i < Math.ceil(start.max / 500) + 2; i += 1) await wheel(at[0], at[1], 600);
+    const end = await page(SCROLL);
+    // At the end of the page the last content sits at the bottom edge, never above it.
+    const blank = end.doc > end.viewport ? end.viewport - (end.contentBottom - end.y) : 0;
+    results.push({ where, y: end.y, max: end.max, appbarTop: end.appbar[0], railOffset: end.railOffset, blank });
+  }
+  check(`${name}: the wheel scrolls the page to its end from the chart, table, sidebar and background alike, and the app bar and rail stay put`,
+    results.every((r) => r.y === r.max && r.appbarTop === 0 && r.railOffset === 0 && r.blank <= 0) && start.appbar[1] === 'sticky', JSON.stringify(results));
+  await page(`(scrollTo(0, 0), 0)`);
+  await sleep(80);
+}
 
 const rowCount = `$$('.records tbody tr').length`;
 const countText = `text('.toolbar-count')`;
@@ -328,9 +383,9 @@ async function run() {
   const metrics = await page(`$$('.metric').map((m) => [m.querySelector('.metric-label').textContent, m.querySelector('.metric-value')?.textContent.trim(), m.querySelector('.metric-coverage').textContent])`);
   check('metric cards show 24 reports, 1,722 units and $20,152.50', JSON.stringify(metrics.map((m) => m[1])) === JSON.stringify(['24', '1,722', '$20,152.50']), JSON.stringify(metrics));
   check('coverage labels state how many reports had a value',
-    metrics[0][2] === 'Category recorded in 22 of 24 reports.' &&
-    metrics[1][2] === 'Quantity recorded in 21 of 24 reports.' &&
-    metrics[2][2] === 'Cost recorded in 20 of 24 reports.', JSON.stringify(metrics.map((m) => m[2])));
+    metrics[0][2] === 'Category in 22 of 24 reports' &&
+    metrics[1][2] === 'Quantity in 21 of 24 reports' &&
+    metrics[2][2] === 'Cost in 20 of 24 reports', JSON.stringify(metrics.map((m) => m[2])));
   check('the Pareto chart starts on NCR reports', (await page(`text('#chart-title')`)) === 'NCR reports by category' && await page(`byText('.seg button', 'NCR reports').getAttribute('aria-pressed') === 'true'`));
   check('bars add up to the 24 stored reports and end at 100% cumulative', (await page(barSum)) === 24 && (await page(barValues)).at(-1)[2] === '100.0%');
   check('reports with no category have their own Uncategorized bar', await page(`byText('.bar', 'Uncategorized')?.querySelector('.bar-count').textContent === '2'`));
@@ -340,6 +395,14 @@ async function run() {
   for (const [width, height] of SIZES) {
     await viewport(width, height);
     check(`all eight table columns are visible at ${width}x${height}`, (await page(`$$('.records thead th').filter((th) => th.getBoundingClientRect().width > 40).length`)) === 8);
+  }
+  await viewport(1440, 900);
+  const summary = await page(`(() => { const b = $('.metrics').getBoundingClientRect(); return { height: Math.round(b.height), cells: $$('.metric').map((m) => Math.round(m.getBoundingClientRect().height)), padding: getComputedStyle($('.metric')).padding, value: getComputedStyle($('.metric-value')).fontSize, chartTop: Math.round($('.pareto').getBoundingClientRect().top) }; })()`);
+  check('the summary row is compact: 120 to 150px tall, 16px padding, 28 to 32px values', summary.height >= 120 && summary.height <= 150 && summary.padding === '16px' && parseFloat(summary.value) >= 28 && parseFloat(summary.value) <= 32, JSON.stringify(summary));
+  check('the Pareto chart starts in the top third of a 900px window', summary.chartTop <= 300, JSON.stringify(summary));
+  for (const [width, height] of SIZES) {
+    await viewport(width, height);
+    await scrollModel(`overview at ${width}x${height}`);
   }
   await viewport(1440, 900);
   await inBothThemes('overview');
@@ -369,6 +432,7 @@ async function run() {
   await type('.search input', 'tool wear');
   await waitFor(`${rowCount} === 3`);
   check('search finds the 3 reports whose cause is "Tool wear"', (await page(countText)) === '3 of 24 reports');
+  await scrollModel('overview with a short filtered table');
   check('the chart follows the search, adds up, and says what it is showing', (await page(barSum)) === 3 && await page(`text('#pareto-coverage').includes('Showing 3 of 24 reports')`));
   await click(`byText('.toolbar .btn', 'Clear filters')`);
   await waitFor(`${rowCount} === 24`);
@@ -397,6 +461,9 @@ async function run() {
     check(`with the panel open at ${width}x${height}, no table column is squeezed unreadable`, widths.every((w) => w >= 72) && await page(`$('.records thead th.col-category').offsetWidth > 0`), JSON.stringify(widths));
   }
   await viewport(1440, 900);
+  const beside = await page(`(() => { const b = $('.detail').getBoundingClientRect(); return [Math.round(b.top), Math.round(b.bottom), innerHeight, getComputedStyle($('.detail')).position]; })()`);
+  check('the detail panel fills the space under the app bar and is outside the page flow', beside[0] === 48 && beside[1] === beside[2] && beside[3] === 'fixed', JSON.stringify(beside));
+  await scrollModel('overview with the detail panel open');
   // The chart must stay legible in the space left beside the open panel.
   await viewport(1280, 800);
   const labels = await page(`$$('.pareto-axis span').filter((el) => el.getClientRects().length > 0).map((el) => el.getBoundingClientRect()).map((b) => [b.left, b.right])`);
@@ -405,7 +472,7 @@ async function run() {
   await inBothThemes('detail');
 
   // --- Switching theme keeps what the user was doing ---
-  await page(`$('.main').scrollTo(0, 0)`);
+  await page(`(scrollTo(0, 0), 0)`);
   await click(`byText('.seg button', 'Recorded cost')`);
   await click(`byText('.bar', 'Material')`);
   await type('.search input', 'syn');
@@ -450,12 +517,25 @@ async function run() {
   await waitFor(`text('.page-head h1') === 'Records'`);
   check('the Records view lists all 24 reports without the chart', (await page(rowCount)) === 24 && await page(`$('.pareto') === null`));
   check('the active view is marked in the navigation', await page(`byText('.rail a', 'Records').getAttribute('aria-current') === 'page'`));
-  await page(`$('.main').scrollTo(0, 400)`);
-  await sleep(100);
-  check('the table header stays in view while the list scrolls', await page(`Math.abs($('.records thead th').getBoundingClientRect().top - $('.main').getBoundingClientRect().top) < 2`));
-  await page(`$('.main').scrollTo(0, 0)`);
+  for (const [width, height] of SIZES) {
+    await viewport(width, height);
+    await scrollModel(`records at ${width}x${height}`);
+  }
+  await viewport(1440, 900);
+  await wheel(700, 500, 500);
+  check('the table header stays just under the app bar while the page scrolls', await page(`scrollY > 100 && Math.abs($('.records thead th').getBoundingClientRect().top - $('.appbar').getBoundingClientRect().bottom) < 2`), await page(`[scrollY, $('.records thead th').getBoundingClientRect().top]`));
+  await page(`(scrollTo(0, 0), 0)`);
+  await type('.search input', 'SYN-NCR-001');
+  await waitFor(`${rowCount} === 10`);
+  await type('.search input', 'SYN-NCR-0019');
+  await waitFor(`${rowCount} === 1`);
+  await scrollModel('records with a one-row table');
+  check('a page shorter than the window does not scroll at all', await page(`document.documentElement.scrollHeight === innerHeight`));
+  await click(`byText('.toolbar .btn', 'Clear filters')`);
+  await waitFor(`${rowCount} === 24`);
   await inBothThemes('records');
   await viewport(390, 800);
+  await scrollModel('records at 390x800');
   const narrow = await page(OVERFLOW);
   check('a 390px-wide screen has no clipped controls or sideways scrolling', !narrow.page && !narrow.main && narrow.clipped === 0 && await page(`$('.theme-toggle').getBoundingClientRect().right <= 390`), JSON.stringify(narrow));
   await screenshot('records-light-390x800');
@@ -476,6 +556,11 @@ async function run() {
     JSON.stringify(await page(chips)) === JSON.stringify(['11 will be imported', '4 with errors', '2 repeated in the file', '1 blank']), JSON.stringify(await page(chips)));
   check('each skipped row is listed with its row number and reason', await page(`$$('#skipped-title ~ .table-wrap tbody tr').length === 6 && text('#skipped-title ~ .table-wrap').includes('NCR ID is empty.') && text('#skipped-title ~ .table-wrap').includes('not a real calendar date')`));
   check('nothing is stored by previewing', (await (await fetch(base + '/api/ncrs')).json()).records.length === 24);
+  for (const [width, height] of SIZES) {
+    await viewport(width, height);
+    await scrollModel(`import at ${width}x${height}`);
+  }
+  await viewport(1440, 900);
   await inBothThemes('import');
 
   // Leaving the Import view and switching theme must not lose the file being checked.
@@ -525,7 +610,9 @@ async function run() {
   check('recorded cost shows one total per currency and never a combined sum',
     costs.length === 3 && costs[0].startsWith('€3,580.40') && costs[1].startsWith('$22,535.25') && costs[2].startsWith('210.00') && costs[2].includes('Currency unspecified'), JSON.stringify(costs));
   const mixed = await page(`$$('.metric').map((m) => [m.querySelector('.metric-value')?.textContent.trim() ?? null, m.querySelector('.metric-coverage').textContent])`);
-  check('report and quantity totals include the imported rows', mixed[0][0] === '35' && mixed[1][0] === '2,618' && mixed[1][1] === 'Quantity recorded in 30 of 35 reports.' && mixed[2][1].startsWith('Cost recorded in 29 of 35 reports.'), JSON.stringify(mixed));
+  const tallest = await page(`Math.round($('.metrics').getBoundingClientRect().height)`);
+  check('three currencies make the summary row taller without clipping anything', tallest > 120 && tallest <= 190 && await page(`$$('.metric-groups li').every((li) => li.scrollWidth <= li.clientWidth + 1 && li.getBoundingClientRect().bottom <= $('.metrics').getBoundingClientRect().bottom)`), String(tallest));
+  check('report and quantity totals include the imported rows', mixed[0][0] === '35' && mixed[1][0] === '2,618' && mixed[1][1] === 'Quantity in 30 of 35 reports' && mixed[2][1] === 'Cost in 29 of 35 reports', JSON.stringify(mixed));
   await click(`byText('.seg button', 'Recorded cost')`);
   const currencies = await page(`[...$$('.seg')[1].querySelectorAll('button')].map((b) => [b.textContent.trim(), b.getAttribute('aria-pressed')])`);
   check('the cost ranking offers each currency separately and starts on the one most reports use', JSON.stringify(currencies) === JSON.stringify([['EUR · 2', 'false'], ['USD · 26', 'true'], ['Unspecified · 1', 'false']]), JSON.stringify(currencies));
@@ -551,7 +638,7 @@ async function run() {
   await waitFor(`$('#number-format').value === ''`);
   check('values like 1,234 leave the number format unchosen and block the import', await page(`text('#step-check ~ .alert').includes('Choose how numbers are written') && byText('.button-row .btn', 'Import').disabled`), await page(`$('#step-check ~ .alert')?.textContent`));
   check('the preview says the reading is not decided yet', await page(`$$('.readings .unread').length === 2 && text('.readings').includes('not decided yet')`));
-  await page(`$('.settings').scrollIntoView({ block: 'start' })`);
+  await page(`(scrollTo(0, $('.settings').getBoundingClientRect().top + scrollY - 64), 0)`);
   await screenshot('import-number-format-light-1440x900');
   await choose('#number-format', 'With a decimal point, as 1,234.56');
   await waitFor(`$$('.readings .read').length === 2`);

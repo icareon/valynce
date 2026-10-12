@@ -130,8 +130,9 @@ const OVERLAY = `(() => {
       transition: left 600ms cubic-bezier(0.2, 0, 0, 1), top 600ms cubic-bezier(0.2, 0, 0, 1), transform 120ms; pointer-events: none; }
     #demo-pointer.down { transform: scale(0.7); }
     /* The caption has its own strip under the app, so it never covers anything. */
-    html, body { overflow: hidden; }
-    #root { height: calc(100% - 56px); }
+    body { min-height: 0; padding-bottom: 56px; }
+    .app { min-height: calc(100dvh - 56px); }
+    .rail { height: calc(100dvh - var(--appbar-h) - 56px); }
     #demo-caption { position: fixed; z-index: 98; left: 0; right: 0; bottom: 0; height: 56px; display: grid; place-items: center;
       background: #1a1b1e; color: #fff; font: 500 17px/1.3 'Inter Variable', system-ui, sans-serif; }
   \`;
@@ -162,8 +163,7 @@ const SCRIPT = [
   [14.6, () => pointTo(`byText('.bar', 'Material')`)],
   [15.4, () => press(`byText('.bar', 'Material')`)],
   [15.6, () => caption('Selecting a category lists its reports. The ranking shows where, not why.')],
-  // Scroll the content pane only, so the application bar stays in the frame.
-  [16.6, () => page(`(() => { const main = document.querySelector('.main'); const head = document.querySelector('.pareto-colhead'); main.scrollTo({ top: main.scrollTop + head.getBoundingClientRect().top - main.getBoundingClientRect().top - 12, behavior: 'smooth' }); })()`)],
+  [16.6, () => page(`(() => { const head = document.querySelector('.pareto-colhead'); window.scrollTo({ top: window.scrollY + head.getBoundingClientRect().top - 60, behavior: 'smooth' }); })()`)],
 ];
 
 let failed = null;

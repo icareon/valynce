@@ -240,7 +240,6 @@ export function App() {
               <div className="page-head">
                 <div>
                   <h1>Quality overview</h1>
-                  <p>What the stored non-conformance reports add up to.</p>
                 </div>
                 {demoNotice}
               </div>

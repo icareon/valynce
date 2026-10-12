@@ -134,6 +134,8 @@ Run `npm run typecheck` and `npm test` before calling a change done. For a chang
 - Orange is reserved for the primary action, the active view, the selected chart bar, selected controls and keyboard focus. Everything else is neutral. Orange never means "alert"; errors use the danger colour with a text label.
 - Sans-serif for descriptions and table content; monospace for navigation, column and chart labels, record IDs and technical values. Numbers that line up use tabular figures.
 - Surfaces are flat: thin borders, small radii, no gradients or decorative patterns.
+- The browser document is the only vertical scroll container. Do not give the shell, the content area or a table a fixed height or its own vertical overflow; the app bar and navigation rail are sticky, and the table header sticks under the app bar. The one exception is the detail panel, which is fixed and scrolls inside itself. `npm run check:browser` checks this with real wheel events.
+- The summary row is compact: content decides its height, with no minimum heights or stretching, and longer explanations sit behind the help buttons.
 - Every control works by keyboard and shows visible focus. Status is never carried by colour alone.
 - Show only controls that work. Do not add placeholders for features that are not built.
 - Do not show trends, percentage changes, scores or findings that are not computed from the stored records.
