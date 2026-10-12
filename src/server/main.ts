@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { serve } from '@hono/node-server';
+import { providerFromEnv } from '../ai/config.ts';
 import { resolveDataDir } from '../core/paths.ts';
 import { NcrStorage } from '../core/storage.ts';
 import { createApp } from './app.ts';
@@ -27,16 +28,30 @@ const storage = new NcrStorage(join(dataDir, 'valynce.db'));
 // Set by "npm run dev" only: the Vite dev server is a different origin from this backend.
 const devOrigin = process.env.VALYNCE_DEV_ORIGIN;
 
+// Optional. With no key the app works as before and makes no outside requests.
+const ai = providerFromEnv();
+const aiTimeoutSeconds = Number(process.env.VALYNCE_AI_TIMEOUT_SECONDS || 60);
+if (!Number.isInteger(aiTimeoutSeconds) || aiTimeoutSeconds < 1 || aiTimeoutSeconds > 300) {
+  throw new Error(`VALYNCE_AI_TIMEOUT_SECONDS must be a whole number from 1 to 300, got "${process.env.VALYNCE_AI_TIMEOUT_SECONDS}"`);
+}
+
 const app = createApp({
   storage,
   loadSample,
   uiDir: join(packageRoot, 'dist', 'ui'),
   trustedOrigins: devOrigin ? [devOrigin] : [],
+  ai,
+  aiTimeoutMs: aiTimeoutSeconds * 1000,
 });
 
 const server = serve({ fetch: app.fetch, port, hostname: HOSTNAME }, (info) => {
   console.log(`Valynce is running at http://${HOSTNAME}:${info.port}`);
   console.log(`Records are stored in ${dataDir}`);
+  console.log(
+    ai === null
+      ? 'AI summary: off (no ANTHROPIC_API_KEY). Nothing is sent outside this computer.'
+      : `AI summary: available through ${ai.name} (${ai.model}) at ${ai.host}. Data is sent only when you confirm a summary.`,
+  );
 });
 
 function shutdown(): void {

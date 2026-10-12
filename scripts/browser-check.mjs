@@ -4,6 +4,7 @@
 // never touches real Valynce data. Chrome is found at CHROME_PATH or the usual places.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer as createHttpServer } from 'node:http';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -63,10 +64,45 @@ const base = `http://127.0.0.1:${appPort}`;
 const dataDir = join(work, 'data');
 let server;
 
-async function startServer() {
+// A stand-in for the AI provider, on this machine. The checks never contact a real
+// provider and never use a real key: the server under test is pointed here instead.
+const model = { mode: 'good', requests: [] };
+const MODEL_REPLIES = {
+  good: {
+    overview: 'Recorded cost in USD sits mostly in the Material category, which rests on one report. Some reports have no cost recorded.',
+    findings: [
+      { kind: 'fact', statement: 'The Material cost comes from a single report of a wrong alloy delivery.', recordIds: ['PC-008'] },
+      { kind: 'hypothesis', statement: 'The labeling reports may share one labeling step, which could be checked.', recordIds: ['PC-001', 'PC-003'] },
+    ],
+    missingInformation: ['Two reports have no cost, and one cost in another currency is not ranked.'],
+    nextSteps: ['Review PC-008 with the receiving inspection records.'],
+  },
+  bad: {
+    overview: 'The root cause is the supplier.',
+    findings: [{ kind: 'fact', statement: 'Everything traces to one report.', recordIds: ['PC-999'] }],
+    missingInformation: [],
+    nextSteps: [],
+  },
+};
+const modelServer = createHttpServer((request, response) => {
+  let body = '';
+  request.on('data', (chunk) => (body += chunk));
+  request.on('end', () => {
+    model.requests.push({ url: request.url, key: request.headers['x-api-key'], body });
+    if (model.mode === 'slow') return; // never answers; the app must give up by itself
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(MODEL_REPLIES[model.mode]) }], usage: { input_tokens: 1, output_tokens: 1 } }));
+  });
+});
+await new Promise((done) => modelServer.listen(0, '127.0.0.1', done));
+const modelHost = `127.0.0.1:${modelServer.address().port}`;
+const AI_ENV = { ANTHROPIC_API_KEY: 'browser-check-not-a-real-key', VALYNCE_AI_BASE_URL: `http://${modelHost}`, VALYNCE_AI_TIMEOUT_SECONDS: '2' };
+
+async function startServer(extra = {}) {
   server = spawn(process.execPath, ['dist/server/main.js'], {
     cwd: root,
-    env: { ...process.env, VALYNCE_DATA_DIR: dataDir, VALYNCE_PORT: String(appPort), VALYNCE_DEV_ORIGIN: '' },
+    // No key unless a check asks for one, whatever the shell running the checks has set.
+    env: { ...process.env, VALYNCE_DATA_DIR: dataDir, VALYNCE_PORT: String(appPort), VALYNCE_DEV_ORIGIN: '', ANTHROPIC_API_KEY: '', VALYNCE_AI_BASE_URL: '', VALYNCE_AI_MODEL: '', VALYNCE_AI_TIMEOUT_SECONDS: '', ...extra },
     stdio: 'ignore',
   });
   await until(async () => (await fetch(`${base}/api/ncrs`)).ok, 'the Valynce server');
@@ -197,6 +233,8 @@ async function screenshot(name) {
 
 async function goto(hash = '') {
   await cdp('Page.navigate', { url: `${base}/${hash}` });
+  // A download can leave the headless page marked hidden, which stops frames and so transitions.
+  await cdp('Page.bringToFront');
   await waitFor(`document.readyState === 'complete' && ($('.empty') || $('.page-head')) !== null`);
 }
 
@@ -839,8 +877,123 @@ async function run() {
   await waitFor(`${rowCount} === 10`);
   check('the 10 reports and their units survive a restart', await page(`byText('.records tbody tr', 'PC-009').querySelector('.col-qty').textContent === '2.5 kg'`));
 
+  // --- Optional AI summary ---
+  const summaryButton = `byText('.pareto-controls .btn', 'Generate summary')`;
+  const panel = `text('.summary')`;
+  check('with no summary yet there is no summary panel, only the button beside the chart controls', await page(`$('.summary') === null && ${summaryButton} !== undefined`));
+  await click(summaryButton);
+  await waitFor(`$('.summary') !== null && ${panel}.includes('No AI provider is configured')`);
+  check('without a key the panel says nothing can be sent and how to configure one, with no send button', await page(`${panel}.includes('ANTHROPIC_API_KEY') && byText('.summary .btn', 'Send and generate') === undefined`), await page(panel));
+  check('without a key the chart and the records list still work', (await page(barValues)).length === 4 && (await page(rowCount)) === 10);
+  await click(`byText('.summary .btn', 'Close')`);
+  await waitFor(`$('.summary') === null`);
+
+  await stopServer();
+  await startServer(AI_ENV);
+  await goto();
+  await waitFor(`${rowCount} === 10`);
+  await click(`byText('.seg button', 'Recorded cost')`);
+  await waitFor(`text('#chart-title') === 'Recorded cost (USD) by category'`);
+  await sleep(400);
+  check('loading the page, switching the metric and filtering send nothing to the provider', model.requests.length === 0, String(model.requests.length));
+  await click(summaryButton);
+  await waitFor(`${panel}.includes('Send this analysis to an AI provider?') && byText('.summary .btn', 'Send and generate') !== undefined`);
+  const confirmText = await page(panel);
+  check('the confirmation names the provider, the model and where the data goes', confirmText.includes('Anthropic') && confirmText.includes('claude-sonnet-5-5') && confirmText.includes(modelHost) && confirmText.includes('an external AI provider'), confirmText);
+  check('the confirmation states the report count and the fields sent and withheld', confirmText.includes('10 reports') && confirmText.includes('NCR ID, opened date, defect category, description, status, disposition, reported cause, recorded cost when stated in USD') && /Not sent\s*supplier, part number, original file cells, file name and row number, affected quantity/.test(confirmText), confirmText);
+  check('opening the confirmation moves keyboard focus to it and still sends nothing', await page(`document.activeElement.id === 'summary-title'`) && model.requests.length === 0);
+  await inBothThemes('summary-confirm');
+  await click(`byText('.summary .btn', 'Cancel')`);
+  await waitFor(`$('.summary') === null`);
+  check('cancelling sends nothing', model.requests.length === 0);
+
+  await click(summaryButton);
+  await waitFor(`byText('.summary .btn', 'Send and generate') !== undefined`);
+  await click(`byText('.summary .btn', 'Send and generate')`);
+  await waitFor(`$('.summary-result') !== null && $('.summary-block') === null`);
+  check('confirming sends exactly one request, to the configured provider only', model.requests.length === 1 && model.requests[0].url === '/v1/messages', JSON.stringify(model.requests.map((r) => r.url)));
+  const sent = model.requests[0]?.body ?? '';
+  check('the request carries the report IDs and descriptions but no part numbers, file name or original cells', sent.includes('PC-008') && sent.includes('Wrong alloy delivered') && !sent.includes('PC-300') && !sent.includes('pareto-check.csv') && !sent.includes('Part No'), sent.slice(0, 300));
+  check('the euro cost is not sent, converted or zeroed: the report is marked as left out', !sent.includes('300') && sent.includes('cost_in_another_or_no_currency'));
+  const resultText = await page(panel);
+  check('the summary is labelled an AI-generated draft with its model and time', resultText.includes('AI-generated draft') && resultText.includes('Anthropic · claude-sonnet-5-5 · generated') && resultText.includes('10 reports sent'), resultText);
+  check('the figures beside it are Valynce\'s own and match the chart: $1,000.00 from 7 of 10, Material $850.00 at 85.0%', resultText.includes('computed by Valynce') && resultText.includes('Total: $1,000.00 from 7 of 10 reports.') && resultText.includes('1. Material: $850.00, 85.0% of the total, from 1 report.'), resultText);
+  check('facts and hypotheses are labelled differently', JSON.stringify(await page(`$$('.summary-findings .tag').map((t) => t.textContent)`)) === JSON.stringify(['From the reports', 'Hypothesis, not verified']));
+  check('the summary says it is not a verified root cause', resultText.includes('Nothing here is a verified root cause'));
+  check('a fresh summary is not marked outdated', await page(`$('.summary-outdated') === null`));
+  check('the key never reaches the page', !(await page(`document.documentElement.outerHTML + JSON.stringify(Object.entries(localStorage))`)).includes(AI_ENV.ANTHROPIC_API_KEY));
+  await page(`$('.summary').scrollIntoView()`);
+  await inBothThemes('summary-result');
+  await scrollModel('overview with a summary');
+
+  await page(`(byText('button.cite', 'PC-008').focus(), 0)`);
+  await press('Enter');
+  await waitFor(`$('.detail') !== null`);
+  check('a cited report ID opens that report, by keyboard', (await page(`text('#detail-title')`)) === 'PC-008' && (await page(`text('.detail')`)).includes('Wrong alloy delivered'), await page(`text('#detail-title')`));
+  await press('Escape');
+  await waitFor(`$('.detail') === null`);
+  check('closing the report returns focus to the citation', await page(`document.activeElement.textContent === 'PC-008'`));
+
+  await click(`byText('.seg button', 'NCR reports')`);
+  await waitFor(`$('.summary-outdated') !== null`);
+  check('changing the metric marks the summary outdated and does not regenerate it', (await page(`text('.summary-outdated')`)).startsWith('Outdated.') && model.requests.length === 1 && (await page(panel)).includes('Total: $1,000.00'), await page(`text('.summary-outdated')`));
+  await screenshot('summary-outdated-light-1440x900');
+  await click(`byText('.seg button', 'Recorded cost')`);
+  await waitFor(`$('.summary') !== null && $('.summary-outdated') === null`);
+  await choose('.toolbar select', 'Open');
+  await waitFor(`$('.summary-outdated') !== null`);
+  check('changing the status filter marks it outdated', true);
+  await click(`byText('.toolbar .btn', 'Clear filters')`);
+  await waitFor(`$('.summary-outdated') === null`);
+  check('returning to the original analysis clears the mark, still with one request in total', model.requests.length === 1);
+
+  await stopServer();
+  await startServer(AI_ENV);
+  await goto();
+  await waitFor(`$('.summary-result') !== null`);
+  check('the summary survives a restart and is outdated against the default metric', await page(`${panel}.includes('wrong alloy delivery') && $('.summary-outdated') !== null`));
+  await click(`byText('.seg button', 'Recorded cost')`);
+  await waitFor(`$('.summary-outdated') === null`);
+
+  // A reply that breaks the rules: one repair, then a clear failure, and the earlier summary is kept.
+  model.mode = 'bad';
+  await click(`byText('.summary .btn', 'Generate again')`);
+  await waitFor(`byText('.summary .btn', 'Send and generate') !== undefined`);
+  await click(`byText('.summary .btn', 'Send and generate')`);
+  await waitFor(`$('.summary-alert') !== null`);
+  const failedText = await page(panel);
+  check('an invalid reply gets one repair attempt and then a clear failure', model.requests.length === 3 && failedText.includes('The summary was not generated') && failedText.includes('Nothing was saved') && failedText.includes('PC-999') && failedText.includes('root cause'), failedText.slice(0, 500));
+  check('the earlier valid summary is still shown after the failure', failedText.includes('wrong alloy delivery') && await page(`$('.summary-outdated') === null`));
+  await inBothThemes('summary-failed', { sizes: [[1440, 900]] });
+
+  // A provider that never answers: the app gives up after its limit and stays usable meanwhile.
+  model.mode = 'slow';
+  await click(`byText('.summary .btn', 'Review and try again')`);
+  await waitFor(`byText('.summary .btn', 'Send and generate') !== undefined`);
+  await click(`byText('.summary .btn', 'Send and generate')`);
+  await waitFor(`${panel}.includes('Generating summary')`);
+  check('while waiting, the button is disabled so a second request cannot be sent', await page(`byText('.pareto-controls .btn', 'Generating…').disabled === true && byText('.summary .btn', 'Send and generate') === undefined`));
+  await click(`byText('.bar', 'Labeling')`);
+  await waitFor(`${rowCount} === 4`);
+  check('while waiting, the chart and the records list still respond', (await page(countText)) === '4 of 10 reports');
+  await click(`byText('.bar', 'Labeling')`);
+  await waitFor(`$('.summary-alert') !== null`, 8000);
+  check('a provider that does not answer ends in a timeout message, with one request sent', (await page(`text('.summary-alert')`)).includes('did not answer in time') && model.requests.length === 4, await page(`text('.summary-alert')`));
+  await click(`byText('.summary .btn', 'Close')`);
+
+  await viewport(390, 800);
+  await page(`$('.summary').scrollIntoView()`);
+  await fits('summary at 390x800');
+  await screenshot('summary-result-light-390x800');
+  await viewport(1440, 900);
+
+  await click(`byText('.summary .btn', 'Discard summary')`);
+  await waitFor(`$('.summary') === null`);
+  check('discarding removes the stored summary', (await (await fetch(`${base}/api/summary/check`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ scope: { metric: 'cost', unit: null, search: '' } }) })).json()).latest === null);
+  check('every request to the provider carried the key from the server environment, never from the page', model.requests.every((r) => r.key === AI_ENV.ANTHROPIC_API_KEY));
+
   const outside = requested.filter((url) => !url.startsWith(base) && !url.startsWith('data:') && !url.startsWith('about:') && !url.startsWith('blob:'));
-  check('the page made no requests to anything but the local server', outside.length === 0, outside.join(', '));
+  check('the page itself made no requests to anything but the local server, also while summaries were generated', outside.length === 0, outside.join(', '));
 }
 
 try {
@@ -853,6 +1006,8 @@ try {
   socket.close();
   chrome.kill();
   server?.kill('SIGKILL');
+  modelServer.closeAllConnections();
+  modelServer.close();
   await sleep(300);
   rmSync(work, { recursive: true, force: true, maxRetries: 3 });
 }

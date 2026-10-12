@@ -49,7 +49,9 @@ CI runs installation, type checking, the tests and the build on Linux for every 
 - A ranking shows where, not why. Do not call the leading category a cause.
 - Tests should fail if the behaviour were wrong. Prefer a fixture small enough to check by hand.
 
-Put code in the folder that owns it: quality rules in `src/modules/quality`, shared entities and storage in `src/core`, the server in `src/server`, the interface in `src/ui`.
+Put code in the folder that owns it: quality rules in `src/modules/quality`, shared entities and storage in `src/core`, the server in `src/server`, the interface in `src/ui`, model adapters and prompts in `src/ai`.
+
+Tests never call a real model: replies are scripted. If you change the AI summary, also run `npm run check:ai:live` with your own key and say what it reported. It sends only the synthetic `fixtures/ai-eval.csv`.
 
 ## Pull requests
 

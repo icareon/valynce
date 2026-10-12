@@ -1,6 +1,7 @@
 // Shapes of the JSON the local backend returns. Types only, so the UI can import them.
 import type { Delimiter } from '../core/csv.ts';
 import type { ImportBatch, InsertResult, NcrRecord } from '../core/ncr.ts';
+import type { AnalysisScope, EvidenceDisclosure } from '../modules/quality/evidence.ts';
 import type {
   DateFormat,
   ImportMapping,
@@ -10,6 +11,7 @@ import type {
   NumberFormat,
   PlannedRow,
 } from '../modules/quality/importRules.ts';
+import type { AiSummary } from '../modules/quality/summaryRules.ts';
 import type { NcrTotals } from '../modules/quality/totals.ts';
 
 export interface NcrListResponse {
@@ -74,4 +76,59 @@ export type LoadSampleResponse = InsertResult;
 
 export interface RemoveSampleResponse {
   deleted: number;
+}
+
+// ---------- AI summary ----------
+
+/** A generated summary with the analysis it belongs to. */
+export interface SummaryRecord {
+  id: number;
+  createdAt: string;
+  provider: string;
+  model: string;
+  /** Identifies the exact evidence it was generated from. */
+  fingerprint: string;
+  scope: AnalysisScope;
+  /** Scope and figures as Valynce computed them when the summary was generated. */
+  facts: string[];
+  /** NCR IDs of the reports that were sent. */
+  recordIds: string[];
+  summary: AiSummary;
+  durationMs: number;
+  /** Model calls made: 1, or 2 when the first reply had to be corrected. */
+  attempts: number;
+}
+
+export interface SummaryCheckRequest {
+  scope: AnalysisScope;
+}
+
+/** What a summary of the current analysis would send, and the state of the last one. Nothing is sent to produce this. */
+export interface SummaryCheckResponse {
+  /** Null when no API key is configured. The key itself never leaves the server. */
+  provider: { name: string; model: string; host: string } | null;
+  /** What would be sent. `ok: false` carries the reason this analysis cannot be summarised as it stands. */
+  request:
+    | { ok: true; fingerprint: string; disclosure: EvidenceDisclosure; facts: string[] }
+    | { ok: false; reason: string; message: string };
+  limits: { records: number; categories: number; textChars: number; timeoutSeconds: number };
+  latest: SummaryRecord | null;
+  /** True when `latest` was generated from different evidence than the current analysis. */
+  latestOutdated: boolean;
+}
+
+export interface SummaryGenerateRequest {
+  scope: AnalysisScope;
+  /** From the check the user confirmed. The request is refused if the evidence has changed since. */
+  fingerprint: string;
+  /** Must be true: the user confirmed sending this data to the provider. */
+  confirmed: boolean;
+}
+
+export interface SummaryGenerateResponse {
+  summary: SummaryRecord;
+}
+
+export interface RemoveSummaryResponse {
+  deleted: boolean;
 }

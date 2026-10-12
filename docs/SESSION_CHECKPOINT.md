@@ -1,21 +1,20 @@
 # Session checkpoint
 
-**Stop point: October 11, 2026**, on branch `main`. Product development is paused here.
+**Stop point: October 12, 2026**, on branch `main`. Increment 4 is complete locally and has not been pushed.
 
-> **Do not resume development until Paul asks for it.** That means no Increment 4, no new features, no npm publication and no announcements. If you are a coding agent reading this at the start of a session, wait for an explicit request before changing product code.
+> **Do not push, publish to npm or announce until Paul asks for it.** If you are a coding agent reading this at the start of a session, wait for an explicit request before changing product code.
 
 ## Where things stand
 
 | | |
 |---|---|
-| Completed | Increment 3 of the Week 1 plan, with Increments 1 and 2 before it and two interface refinements after it (scrolling fix, borderless summary with USD-only cost) |
-| Branch | `main`, matching `origin/main` |
-| Product tag | `v0.1.0-alpha.6`, commit `7d1a9e4`. This is the last commit that changed the product. |
-| Final commit | The tip of `main`. Everything after `7d1a9e4` is documentation only: the short README, `docs/REFERENCE.md` and this file. |
-| Earlier tags | `v0.1.0-alpha.5` is the scrolling fix, `v0.1.0-alpha.4` is Increment 3 as first completed, and `alpha.1` to `alpha.3` are the earlier increments. None were moved. |
-| GitHub prereleases | `v0.1.0-alpha.4`, `v0.1.0-alpha.5` and `v0.1.0-alpha.6`. The demo video was removed from `alpha.5` and is not attached to `alpha.6`; the recording script and the local file in `demo/out/` are kept. |
+| Completed | Increment 4: the optional, evidence-linked AI summary, on top of Increments 1 to 3 and the two interface refinements |
+| Branch | `main`, ahead of `origin/main` by the Increment 4 commit. Not pushed. |
+| Product tag | `v0.1.0-alpha.7`, local only. |
+| Earlier tags | `v0.1.0-alpha.6` is the borderless summary with USD-only cost, `alpha.5` the scrolling fix, `alpha.4` Increment 3, and `alpha.1` to `alpha.3` the earlier increments. None were moved. |
+| GitHub prereleases | `v0.1.0-alpha.4`, `v0.1.0-alpha.5` and `v0.1.0-alpha.6`. Nothing for `alpha.7` yet. |
 | Repository | https://github.com/icareon/valynce |
-| Next planned | Increment 4: an optional, evidence-linked AI summary that cites the report IDs it is based on |
+| Next planned | Run the live model check with a real key, then decide on pushing `alpha.7`. After that: export of the reports themselves. |
 
 The README was cut down to a short overview on October 11, 2026. Data locations, definitions, limitations and the roadmap moved to `docs/REFERENCE.md`.
 
@@ -61,7 +60,28 @@ One thing to know about the history: on October 11, 2026 every commit message wa
 - Import: when a file has no currency column, an unticked box "All costs in this file are USD" is offered. The preview states how many costs it will label, and the tick is dropped if the cost or currency column is changed. When the file has a currency column, the earlier setting for rows that state none is still there.
 - At narrow widths the metric selector now stacks, because the longer "Recorded cost (USD)" label no longer fits on one line at 390px.
 
+**Increment 4, optional AI summary** (`v0.1.0-alpha.7`)
+- "Generate summary" beside the chart controls. It first shows the provider, model, host, report count and the fields sent and withheld; data leaves only after that view is confirmed, and the server refuses if the evidence changed in between.
+- One provider, Anthropic's Messages API with structured outputs, default model `claude-sonnet-5-5`, behind a small adapter in `src/ai`. No SDK and no new dependency: the adapter uses `fetch`. Configured by `ANTHROPIC_API_KEY` in a git-ignored `.env`; with no key the app is unchanged and makes no outside request.
+- The evidence bundle is built on the backend from the same population, metric and ranking as the chart (`src/modules/quality/evidence.ts`). Supplier, part number, original cells, file details and unranked metrics are never sent. Limits: 200 reports, 40 categories, 400 characters per text; a larger selection is refused, not cut.
+- One bounded call with at most one repair. Replies are validated (`src/modules/quality/summaryRules.ts`) for shape, cited report IDs, figures and wording about root causes, causal facts, savings and rates. Figures shown beside the summary are written by the backend.
+- The summary is stored in a new `ai_summary` table (schema version 5, backup copy written first, records untouched) with its scope, figures, report IDs and evidence fingerprint. Only the latest is kept. It is marked outdated when the analysis no longer matches and is never regenerated unasked.
+- The panel shows loading, failure and timeout without blocking the app, labels facts and hypotheses, and makes cited report IDs open the report.
+- The wording about external requests in the README, the reference and the app bar now separates normal local use from the optional summary.
+
 ## Verification actually completed
+
+Increment 4, on macOS with Node 24.21.0, October 12, 2026:
+
+- `npm run typecheck`, `npm test` (90 tests, 21 of them new in `tests/ai.test.ts`) and `npm run build` passed.
+- The new tests use `fixtures/ai-eval.csv` and scripted model replies. They cover: totals worked out by hand ($955.00 in 5 of 9 reports; 170 pieces in 7 of 9, with 2.5 kg kept apart); missing and non-USD costs never sent as zero or converted; withheld fields absent from the request; the 200-report limit refusing rather than truncating; a description containing instructions; root-cause, causal, savings, rate and invented-figure claims; invalid shape; nonexistent report IDs; one repair and no more; provider failure, timeout and missing key; duplicate requests; changed metric, filter and records; storage and removal; the adapter's request body; and the key never appearing in a response or in the database.
+- `npm run check:browser` passed all 252 checks (50 new). The new ones drive the real interface against a stand-in provider on the same machine: no key, confirmation contents, nothing sent before confirming, exactly one request on confirming, request contents, labels, citations opening a report by keyboard, outdated marking on metric and filter change, persistence across a restart, the invalid-reply failure, the timeout, both themes, 390px width and scrolling.
+- The database upgrade from version 4 to 5 was run on a copy of an existing local database: 11 records before and after, backup written.
+- Screenshots of the confirmation, the result, the outdated state and the failure in both themes were inspected by the coding agent, not by a person.
+- **Not done: a live call to the real model.** No Anthropic key was available, so `npm run check:ai:live` reported "NOT RUN". The request format follows the official documentation read on October 12, 2026 and is tested against a scripted server, but no real reply has been seen. Do not describe the summary as working with the live model until that check has been run.
+
+Earlier increments (the paragraphs below are as recorded at `alpha.6`):
+
 
 All of this ran on macOS with Node 24.21.0, against tag `v0.1.0-alpha.6`, from a clean clone:
 
@@ -84,6 +104,8 @@ After publication, CI on GitHub runs installation, type checking, tests and the 
 
 These need a person, and none has been done:
 
+- **A live AI summary.** Put a key in `.env` and run `npm run check:ai:live`, then try the feature in the app. It sends only `fixtures/ai-eval.csv`.
+- **Review of the summary wording checks** against real model output. They are pattern-based and may reject harmless sentences or miss a claim phrased unusually.
 - **Human visual review** of the interface in both themes, including comparison with the intended reference design.
 - **Full playback** of the demo video from start to finish.
 - **Platform checks**: Windows, Linux desktop, Safari and Firefox.
@@ -112,13 +134,15 @@ npm run typecheck
 npm test
 npm run build && npm run check:browser    # needs Chrome; writes screenshots
 npm run build && npm run demo:record      # writes demo/out/valynce-pareto-demo.mp4
+npm run check:ai:live                     # needs ANTHROPIC_API_KEY; sends only synthetic data
 ```
 
-To reproduce the tagged alpha exactly: `git checkout v0.1.0-alpha.6 && npm ci && npm run build && npm test`.
+To reproduce the tagged alpha exactly: `git checkout v0.1.0-alpha.7 && npm ci && npm run build && npm test`.
 
 ## When work resumes
 
 1. Read `AGENTS.md`, then this file.
-2. Confirm `git status` is clean and `main` matches `origin/main`.
+2. Check `git status`. The Remotion project in `demo/` and a related paragraph in `AGENTS.md` are deliberately uncommitted; leave them unless asked.
 3. Re-run the checks above before changing anything.
-4. Start Increment 4 only when asked. Its constraints are already in `AGENTS.md` under "Network and AI": keys stay server-side, nothing is sent to a model without an explicit user action, and a summary must cite the report IDs it rests on and must not present anything as a verified root cause.
+4. Run the live AI check with a real key and record its actual result here.
+5. Push `main` and the `alpha.7` tag only when asked.

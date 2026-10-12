@@ -13,7 +13,8 @@ Technical detail that does not belong in the [README](../README.md). The rules c
 ## Where your data lives
 
 - **Local only.** The server listens on `127.0.0.1`, so other machines cannot reach it. It refuses requests under other host names and writes coming from other websites.
-- **No outside requests today.** Fonts are bundled. The app contacts nothing but its own local server, and there is no telemetry. The planned AI summary would send the reports it summarises to a model provider, and only when you ask for it.
+- **No outside requests in normal use.** Fonts are bundled. The browser page contacts nothing but its own local server, and there is no telemetry. With no API key configured, the server makes no outside request either.
+- **One optional outside request.** If you configure a key and confirm **Generate summary**, the server sends the evidence for that one analysis to the AI provider. See [AI summary](#ai-summary) for exactly what is and is not sent.
 - **Where the database lives.** In your per-user data folder, outside the project folder, so updating or deleting the project does not touch your records:
 
   | System | Folder |
@@ -24,6 +25,48 @@ Technical detail that does not belong in the [README](../README.md). The rules c
 
   Set `VALYNCE_DATA_DIR` to use another folder and `VALYNCE_PORT` to change the port, in your shell or in a `.env` file copied from [`.env.example`](../.env.example).
 - **Backups.** When a newer version needs to change the database's structure, it first saves an untouched copy beside it, named like `valynce.db.v3.bak`. There are no scheduled backups: to make your own, stop Valynce and copy `valynce.db`.
+
+## AI summary
+
+Optional. Without a key the feature explains how to turn it on and everything else works offline.
+
+**Setup.** Copy `.env.example` to `.env`, set `ANTHROPIC_API_KEY` to your own key from the [Claude Console](https://platform.claude.com/), and restart Valynce. `.env` is git-ignored. The key stays in the server process: it is not stored in the database and never sent to the browser.
+
+| Variable | Meaning | Default |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Your key. Empty means the feature is off. | empty |
+| `VALYNCE_AI_MODEL` | Model used for summaries. | `claude-sonnet-5-5` |
+| `VALYNCE_AI_TIMEOUT_SECONDS` | Time one request may take, 1 to 300. | `60` |
+| `VALYNCE_AI_BASE_URL` | Address of the provider's API. The confirmation shows the host. | `https://api.anthropic.com` |
+
+**Provider and model.** One provider is implemented, Anthropic, through its Messages API with structured outputs, which constrain the reply to a JSON schema. The default model is Claude Sonnet 5.5: a current, generally available model that supports structured outputs, and fast enough for a short reply. The provider sits behind a small adapter (`src/ai/provider.ts`), so another can be added without touching the rules. Anthropic's own terms govern how it handles what you send.
+
+**What happens when you choose Generate summary.**
+
+1. Valynce shows the provider, model and host, the number of reports, the fields that would be sent and those that would not. Nothing has been sent.
+2. When you confirm, the server builds the evidence again and refuses if it no longer matches what you reviewed.
+3. One request is made. If the reply fails a check, one corrected reply is requested. If that fails too, nothing is saved and the reasons are shown.
+4. The summary is stored locally with its scope, figures and report IDs, and shown as an "AI-generated draft".
+
+**What is sent.** For the reports in the analysis: NCR ID, opened date, defect category, description, status, disposition, reported cause, and the report's value for the metric being ranked. Also the ranking itself (category totals, shares, coverage counts) and the search text and status filter. If a category is selected in the chart, only that category's reports are listed.
+
+**What is not sent.** Supplier, part number, the original file cells, the file name and row number, and any metric not being ranked. A cost in another currency is not sent; the report is marked as left out. Descriptions and reported causes are sent as written, so a name typed into a description is sent with it.
+
+**Limits.** At most 200 reports and 40 categories per request. A larger selection is refused with a request to narrow it; Valynce never sends part of a selection quietly. A description or reported cause over 400 characters is sent shortened, marked `[shortened]`, and counted in the confirmation. A request is abandoned after the time limit, and only one runs at a time.
+
+**What is checked in every reply.**
+
+- Shape: an overview, at most three findings, at most five missing-information notes, at most three suggested checks, each within a length limit.
+- Citations: every finding cites at least one report ID, and every ID must be one that was sent.
+- Figures: any number in the text must already appear in the evidence. The figures shown under "Analysis scope and figures" are written by Valynce from the ranking, not by the model.
+- Wording: no stated or implied root cause, no causal claim outside a finding marked as a hypothesis, no savings estimates, no defect rates.
+- Descriptions are treated as data. An instruction written inside a report is not followed, and a reply that acts on one fails the checks above.
+
+**Outdated summaries.** A summary belongs to the exact evidence it was generated from. If the reports, the search, the status filter, the selected category or the metric change, it is marked "Outdated" and left as it was. It is regenerated only when you ask.
+
+**What these checks cannot do.** They test wording and traceability, not truth. A sentence can cite real reports and still misread them, and numbers written as words are not checked. Treat every summary as a draft and open the cited reports.
+
+**Trying it with synthetic data.** Import [`fixtures/ai-eval.csv`](../fixtures/ai-eval.csv): nine invented reports with missing costs, a euro cost, a quantity in kg, and one description that tells the model to break the rules. `npm run check:ai:live` sends that same file to the provider from a throwaway database and reports whether real replies pass every check.
 
 ## What the numbers mean
 
@@ -53,21 +96,20 @@ This is an early alpha. Expect rough edges.
 - **One grouping.** The Pareto chart groups by defect category only.
 - **Cost analysis in USD only.** The cost total and cost ranking cover costs stated in US dollars. Other currencies are stored and listed, and counted as left out, but not totalled or ranked yet.
 - **Built-in SQLite.** Storage uses Node's `node:sqlite` module, which Node labels a release candidate.
-- **No AI features.** No model is called and no summary is generated.
+- **AI summary is a draft.** It is optional, limited to 200 reports per request, uses one provider, and keeps only the most recent summary. Its checks were exercised with scripted replies; a live run against the real model has not been done yet. The wording checks are in English.
 
 ## Roadmap
 
 Planned, not built. Order may change.
 
-1. An optional summary of the analysis that cites the report IDs it is based on, sent to a model only when you ask.
-2. Export of the reports themselves.
-3. A packaged launcher, so the app starts with one command.
+1. Export of the reports themselves.
+2. A packaged launcher, so the app starts with one command.
 
 ## How it is built
 
-TypeScript throughout: a React interface built with Vite, a small Hono server on Node, and SQLite for storage. Quality rules, storage, interface and server are kept in separate folders, described in [AGENTS.md](../AGENTS.md).
+TypeScript throughout: a React interface built with Vite, a small Hono server on Node, and SQLite for storage. Quality rules, storage, interface, server and model code are kept in separate folders, described in [AGENTS.md](../AGENTS.md).
 
-**Valynce contains no AI features today.** No model is called and no summary is generated. AI coding agents assisted in writing the code, working under the rules in [AGENTS.md](../AGENTS.md) and checked by the tests and browser checks in this repository.
+The only AI feature is the optional summary described above: one bounded model call per request, with no agent, no tool use and no background processing. AI coding agents also assisted in writing the code, working under the rules in [AGENTS.md](../AGENTS.md) and checked by the tests and browser checks in this repository.
 
 ## Screenshots
 

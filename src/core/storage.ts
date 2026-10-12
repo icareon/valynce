@@ -61,6 +61,23 @@ const MIGRATIONS: readonly string[] = [
   UPDATE ncr SET quantity_milli = quantity_affected * 1000 WHERE quantity_affected IS NOT NULL;
   ALTER TABLE ncr DROP COLUMN quantity_affected;
   `,
+  // 5: generated summaries, each with the analysis it was made for. Records are untouched.
+  // No API key or other credential is ever stored here.
+  `
+  CREATE TABLE ai_summary (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    scope_json TEXT NOT NULL,
+    facts_json TEXT NOT NULL,
+    record_ids_json TEXT NOT NULL,
+    summary_json TEXT NOT NULL,
+    duration_ms INTEGER NOT NULL,
+    attempts INTEGER NOT NULL
+  ) STRICT;
+  `,
 ];
 
 const INSERT_NCR = `
@@ -98,6 +115,29 @@ export interface ImportBatchInput {
   rowsDuplicate: number;
   rowsRejected: number;
   rowsBlank: number;
+}
+
+/** A generated summary as stored: the text, what it was generated from and who generated it. */
+export interface SummaryInput {
+  provider: string;
+  model: string;
+  /** Identifies the exact evidence the summary was generated from. */
+  fingerprint: string;
+  /** The analysis scope, kept as JSON. */
+  scope: unknown;
+  /** The figures Valynce computed for that analysis, as sentences. */
+  facts: string[];
+  /** NCR IDs of the reports that were sent. */
+  recordIds: string[];
+  /** The validated summary, kept as JSON. */
+  summary: unknown;
+  durationMs: number;
+  attempts: number;
+}
+
+export interface StoredSummary extends SummaryInput {
+  id: number;
+  createdAt: string;
 }
 
 export const SCHEMA_VERSION = MIGRATIONS.length;
@@ -252,6 +292,55 @@ export class NcrStorage {
   deleteByOrigin(origin: NcrOrigin): number {
     const { changes } = this.#db.prepare('DELETE FROM ncr WHERE origin = ?').run(origin);
     return Number(changes);
+  }
+
+  /** Stores a summary and returns it. Earlier summaries are removed: only the latest is kept. */
+  saveSummary(input: SummaryInput): StoredSummary {
+    const createdAt = new Date().toISOString();
+    this.#transaction(() => {
+      this.#db.exec('DELETE FROM ai_summary');
+      this.#db
+        .prepare(`
+          INSERT INTO ai_summary (
+            created_at, provider, model, fingerprint, scope_json, facts_json, record_ids_json, summary_json, duration_ms, attempts
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `)
+        .run(
+          createdAt,
+          input.provider,
+          input.model,
+          input.fingerprint,
+          JSON.stringify(input.scope),
+          JSON.stringify(input.facts),
+          JSON.stringify(input.recordIds),
+          JSON.stringify(input.summary),
+          Math.round(input.durationMs),
+          input.attempts,
+        );
+    });
+    return this.latestSummary()!;
+  }
+
+  latestSummary(): StoredSummary | null {
+    const row = this.#db.prepare('SELECT * FROM ai_summary ORDER BY id DESC LIMIT 1').get();
+    if (row === undefined) return null;
+    return {
+      id: row.id as number,
+      createdAt: row.created_at as string,
+      provider: row.provider as string,
+      model: row.model as string,
+      fingerprint: row.fingerprint as string,
+      scope: JSON.parse(row.scope_json as string) as unknown,
+      facts: JSON.parse(row.facts_json as string) as string[],
+      recordIds: JSON.parse(row.record_ids_json as string) as string[],
+      summary: JSON.parse(row.summary_json as string) as unknown,
+      durationMs: row.duration_ms as number,
+      attempts: row.attempts as number,
+    };
+  }
+
+  deleteSummary(id: number): boolean {
+    return Number(this.#db.prepare('DELETE FROM ai_summary WHERE id = ?').run(id).changes) === 1;
   }
 
   getMeta(key: string): string | null {

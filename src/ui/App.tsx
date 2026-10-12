@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { filterRecords, NO_FILTER } from '../modules/quality/filter.ts';
 import type { RecordFilter } from '../modules/quality/filter.ts';
-import { computePareto } from '../modules/quality/pareto.ts';
+import type { AnalysisScope } from '../modules/quality/evidence.ts';
+import { computePareto, pickSeries } from '../modules/quality/pareto.ts';
 import type { ParetoMetric } from '../modules/quality/pareto.ts';
 import { REPORTING_CURRENCY } from '../modules/quality/totals.ts';
 import type { NcrListResponse } from '../server/contract.ts';
@@ -13,6 +14,7 @@ import { ImportView } from './Import.tsx';
 import { MetricCards, ParetoPanel } from './Overview.tsx';
 import { RecordDetail } from './RecordDetail.tsx';
 import { RecordsPanel } from './Records.tsx';
+import { SummaryPanel, useSummary } from './Summary.tsx';
 
 type View = 'overview' | 'records' | 'import';
 type Theme = 'light' | 'dark';
@@ -132,9 +134,29 @@ export function App() {
   );
   const selected = records.find((r) => r.id === selectedId) ?? null;
 
+  // What the chart is showing, in the form a summary is requested and remembered by.
+  const wantedUnit = metric in seriesUnits ? seriesUnits[metric] : usualUnit;
+  const shownUnit = metric === 'quantity' ? (pickSeries(pareto, wantedUnit)?.unit ?? null) : null;
+  const scope = useMemo<AnalysisScope>(
+    () => ({
+      metric,
+      unit: shownUnit,
+      search: filter.search,
+      ...(filter.status === undefined ? {} : { status: filter.status }),
+      ...(filter.category === undefined ? {} : { category: filter.category }),
+    }),
+    [metric, shownUnit, filter],
+  );
+  const summary = useSummary(scope, data, data !== null && records.length > 0 && view === 'overview');
+  const storedNumbers = useMemo(() => new Set(records.map((r) => r.ncrNumber)), [records]);
+
   const openRecord = (id: number) => {
     if (selectedId === null) opener.current = document.activeElement as HTMLElement | null;
     setSelectedId(id);
+  };
+  const openRecordByNumber = (ncrNumber: string) => {
+    const record = records.find((r) => r.ncrNumber === ncrNumber);
+    if (record !== undefined) openRecord(record.id);
   };
   const closeRecord = () => {
     setSelectedId(null);
@@ -185,7 +207,7 @@ export function App() {
           <span className="here">NCR Analyzer</span>
         </p>
         <span className="spacer" />
-        <span className="local" title="Valynce is running on this computer. Records stay in a local database.">
+        <span className="local" title="Valynce is running on this computer. Records stay in a local database. Nothing is sent elsewhere unless you choose Generate summary and confirm it.">
           <span className="local-dot" aria-hidden="true" />
           Local
         </span>
@@ -251,11 +273,14 @@ export function App() {
                 stored={records.length}
                 categoryCounts={categoryCounts}
                 onMetric={setMetric}
-                seriesUnit={metric in seriesUnits ? seriesUnits[metric] : usualUnit}
+                seriesUnit={wantedUnit}
                 onSeries={(unit) => setSeriesUnits({ ...seriesUnits, [metric]: unit })}
                 selected={filter.category}
                 onSelect={(category) => setFilter({ ...filter, category })}
+                onSummary={summary.open}
+                summaryBusy={summary.mode === 'sending'}
               />
+              <SummaryPanel control={summary} stored={storedNumbers} onOpenRecord={openRecordByNumber} />
               {recordsPanel('Records')}
             </>
           )}

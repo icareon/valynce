@@ -130,6 +130,17 @@ export function computePareto(records: readonly ParetoInput[], metric: ParetoMet
   return { metric, population: records.length, recorded: records.length - missing - excluded, missing, excluded, series };
 }
 
+/**
+ * The series to show: the wanted unit when it is among the results, otherwise
+ * the unit most of these reports use. Undefined when nothing can be ranked.
+ */
+export function pickSeries(result: ParetoResult, wantedUnit: string | null | undefined): ParetoSeries | undefined {
+  return (
+    result.series.find((s) => wantedUnit !== undefined && s.unit === wantedUnit) ??
+    [...result.series].sort((a, b) => b.recorded - a.recorded)[0]
+  );
+}
+
 /** A value in plain digits with a point as the decimal separator, for files rather than screens. */
 export function plainValue(metric: ParetoMetric, value: number): string {
   if (metric === 'count') return String(value);

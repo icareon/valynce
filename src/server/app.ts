@@ -1,11 +1,13 @@
 import { readFile, stat } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { Hono } from 'hono';
+import type { ModelProvider } from '../ai/provider.ts';
 import type { NcrFields } from '../core/ncr.ts';
 import type { NcrStorage } from '../core/storage.ts';
 import { computeTotals } from '../modules/quality/totals.ts';
 import type { LoadSampleResponse, NcrListResponse, RemoveSampleResponse } from './contract.ts';
 import { registerImportRoutes } from './import.ts';
+import { registerSummaryRoutes } from './summary.ts';
 
 export interface AppOptions {
   storage: NcrStorage;
@@ -18,6 +20,10 @@ export interface AppOptions {
    * proxies to this backend. Empty in the packaged app.
    */
   trustedOrigins?: readonly string[];
+  /** The model provider for summaries. Null or absent when no key is configured; everything else still works. */
+  ai?: ModelProvider | null;
+  /** How long one summary request may take, in milliseconds. */
+  aiTimeoutMs?: number;
 }
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -43,7 +49,7 @@ async function isFile(path: string): Promise<boolean> {
   }
 }
 
-export function createApp({ storage, loadSample, uiDir, trustedOrigins = [] }: AppOptions): Hono {
+export function createApp({ storage, loadSample, uiDir, trustedOrigins = [], ai = null, aiTimeoutMs }: AppOptions): Hono {
   const app = new Hono();
   const uiRoot = resolve(uiDir);
 
@@ -101,6 +107,7 @@ export function createApp({ storage, loadSample, uiDir, trustedOrigins = [] }: A
   });
 
   registerImportRoutes(app, storage);
+  registerSummaryRoutes(app, storage, ai, aiTimeoutMs);
 
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 

@@ -101,6 +101,22 @@ These terms keep their shop-floor meaning. Do not rename, merge or reinterpret t
 - The server binds to `127.0.0.1` only and refuses requests under other host names and writes from other origins. Do not loosen this.
 - Model provider keys stay in the server process. They are never sent to the browser.
 - Records are sent to an AI provider only when the user explicitly triggers it for that request. Nothing is sent in the background.
+- With no key configured the app makes no outside request at all, and every analysis still works.
+
+## AI summary rules
+
+- **One bounded call.** A summary is one model request with a schema-bound reply, plus at most one repair request when the first reply fails a check (`src/ai/summarize.ts`). No agent framework, no tool use, no loop. The request has a time limit and an output limit.
+- **One adapter.** Provider-specific code stays in its adapter behind `ModelProvider` (`src/ai/provider.ts`); today that is `src/ai/anthropic.ts`. Prompt text and the reply schema live in `src/ai/prompt.ts`. Check the provider's current documentation before changing either.
+- **Explicit sending.** "Generate summary" first shows the provider, model, host, report count and fields. Data leaves only after the user confirms that view, and the server refuses a request whose evidence differs from what was confirmed. Never generate on import, start-up, or a change of filter or metric.
+- **The evidence bundle** is built on the backend in `src/modules/quality/evidence.ts` from the same population, metric and ranking as the chart. It is everything that is sent. Supplier, part number, original cells and file details are never in it, and neither is a metric that is not being ranked.
+- **No silent truncation.** A selection over the limits in `evidence.ts` is refused with a request to narrow it. A long description is shortened only with a marker in the text and a count in the confirmation.
+- **Untrusted text.** Descriptions and reported causes are data. They go in the bundle, never in the system prompt, and nothing in them is followed as an instruction.
+- **Figures come from the backend.** The scope and figures shown beside a summary are written by `evidence.ts`. Any number the model writes must already be in the evidence, or the reply is rejected.
+- **Validate everything** in `src/modules/quality/summaryRules.ts`: shape and limits, cited report IDs, figures, and wording that claims a root cause, a causal fact, savings or a defect rate. A reply that fails twice is discarded and the user sees why.
+- **Facts and hypotheses stay apart.** Each finding is one or the other, cites report IDs and is labelled as such. A summary is always labelled "AI-generated draft".
+- **Tied to its snapshot.** A stored summary keeps the scope, figures, report IDs and a fingerprint of its evidence. When the current analysis differs it is marked outdated and is never regenerated without the user asking.
+- **Keys.** The API key is read from the environment, stays in the server process, and is never written to the database, the logs or the browser.
+- **Tests** use scripted replies and prove what Valynce accepts and rejects. Only `npm run check:ai:live` shows how a real model behaves; never claim the summary works from mocked tests alone.
 
 ## Dependencies and commands
 
@@ -114,6 +130,7 @@ These terms keep their shop-floor meaning. Do not rename, merge or reinterpret t
 | `npm test` | Runs the tests in `tests` |
 | `npm run typecheck` | Type-checks UI, backend and tests |
 | `npm run check:browser` | Drives the built app in headless Chrome: clicks, keyboard, filters, both themes, restarts, layout and contrast. Needs `npm run build` first and a local Chrome |
+| `npm run check:ai:live` | Sends the synthetic `fixtures/ai-eval.csv` to the configured provider and reports whether real replies pass every check. Needs `ANTHROPIC_API_KEY` |
 | `npm run demo:record` | Records the 20-second Pareto demo to `demo/out/` (git-ignored) using headless Chrome |
 | `npm run build` | Builds the UI and backend into `dist` |
 | `npm start` | Serves the built app at `http://127.0.0.1:4310` |
