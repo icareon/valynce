@@ -8,10 +8,10 @@
 
 | | |
 |---|---|
-| Completed | Increments 1, 2 and 3 of the Week 1 plan, plus one layout fix |
-| Product tag | `v0.1.0-alpha.5` (commit `1957069`): Increment 3 with the scrolling fix and compact summary row |
-| Earlier tags | `v0.1.0-alpha.4` is Increment 3 as first completed. `alpha.1` to `alpha.3` are the earlier increments. None were moved for the fix. |
-| After the tag | Documentation only: README links and this file. |
+| Completed | Increments 1, 2 and 3 of the Week 1 plan, plus a layout fix and a summary refinement |
+| Product tag | `v0.1.0-alpha.6`: Increment 3 with the borderless summary and USD-only cost display |
+| Earlier tags | `v0.1.0-alpha.5` is the scrolling fix, `v0.1.0-alpha.4` is Increment 3 as first completed, and `alpha.1` to `alpha.3` are the earlier increments. None were moved. |
+| GitHub prereleases | `v0.1.0-alpha.4` and `v0.1.0-alpha.5`, each with the demo video. `alpha.6` is a tag only; the README still links the `alpha.5` video, which shows the earlier summary. |
 | Repository | https://github.com/icareon/valynce |
 | Next planned | Increment 4: an optional, evidence-linked AI summary that cites the report IDs it is based on |
 
@@ -48,16 +48,27 @@ One thing to know about the history: on October 11, 2026 every commit message wa
 - The document is now the only vertical scroll container. The app bar and navigation rail are sticky, the table grows with its rows, and its header sticks under the app bar. The detail panel is fixed and scrolls inside itself.
 - The three summary tiles are one compact row, about 120px tall with the demo data, growing only when there are several currencies or units.
 
+**Borderless summary and USD-only cost** (`v0.1.0-alpha.6`)
+- The summary is three borderless groups on the page: NCR reports, affected quantity with its unit, and recorded cost (USD). Thin vertical rules separate them and one rule runs underneath. It is 88px tall at 1440x900 and 1280x800 (it was 121px), and the chart starts 222px from the top (it was 255px). It stacks at narrow widths.
+- The summary and the cost ranking show only costs stated in USD. The currency selector is gone. Coverage is stated as "USD cost recorded in 6 of 11 reports", and the ranking also says how many reports have a cost in another or an unstated currency and how many have no cost. With no USD cost the text is "No USD costs recorded."
+- Nothing is converted or relabelled. Costs in other currencies and unstated ones are unchanged in storage, the records list, the detail panel and the source cells. Stored totals still hold every currency separately; only what is displayed changed, and there is no database migration.
+- NCR count and quantity are unchanged and still use the whole population. Quantity keeps one total and one ranking per unit.
+- The exported ranking has one more column, `reports_with_a_cost_in_another_or_no_currency`, so the file states what the USD ranking left out.
+- Import: when a file has no currency column, an unticked box "All costs in this file are USD" is offered. The preview states how many costs it will label, and the tick is dropped if the cost or currency column is changed. When the file has a currency column, the earlier setting for rows that state none is still there.
+- At narrow widths the metric selector now stacks, because the longer "Recorded cost (USD)" label no longer fits on one line at 390px.
+
 ## Verification actually completed
 
-All of this ran on macOS with Node 24.21.0, against commit `1957069`, from a clean clone:
+All of this ran on macOS with Node 24.21.0, against tag `v0.1.0-alpha.6`, from a clean clone:
 
-- `npm ci`, `npm run typecheck`, `npm test` (65 tests) and `npm run build` passed.
-- `npm run check:browser` passed all 166 checks in headless Chrome. They cover loading and removing demo data, filters, the detail panel by keyboard, a full CSV import, re-import, removal of an import, the number-format choice, all three Pareto metrics against `fixtures/pareto-check.csv`, the CSV export, both themes, toggle persistence, text contrast, keyboard focus, reduced motion, layout at 1440x900, 1280x800 and 390x800, and persistence across server restarts.
+- `npm ci`, `npm run typecheck`, `npm test` (69 tests) and `npm run build` passed.
+- USD figures were checked against the contributing records three ways: by hand for `fixtures/pareto-check.csv` ($1,000.00 in 7 of 10 reports, with the 300.00 EUR report left out) and `fixtures/ncr-import-example.csv` ($2,382.75 in 6 of 11); in the tests, where each bar is recomputed from the reports of its category; and in the browser checks, where each bar on screen is compared with the sum of the USD costs read back from storage.
+- The browser checks also read storage back after the mixed-currency import and confirm the two EUR costs and the unstated one are intact with their original cells, and that the records list and detail panel still show them as recorded.
+- `npm run check:browser` passed all 202 checks in headless Chrome. They cover loading and removing demo data, filters, the detail panel by keyboard, a full CSV import, re-import, removal of an import, the number-format choice, all three Pareto metrics against `fixtures/pareto-check.csv`, the CSV export, both themes, toggle persistence, text contrast, keyboard focus, reduced motion, layout at 1440x900, 1280x800 and 390x800, and persistence across server restarts.
 - Scrolling was checked with real wheel events over the chart, table, sidebar and page background, on the Overview, Records and Import views, with a short filtered table, a one-row table and the detail panel open. In each case only the document scrolls, it is exactly as tall as its content, and the app bar and rail stay in place. The original fault was reproduced and measured before the fix.
 - Figures for `fixtures/pareto-check.csv` were worked out by hand and match the tests and the app.
 - Screenshots in both themes were inspected by the coding agent, not by a person.
-- The demo video was recorded and its duration (20 s), size (1280x720) and final frame were checked.
+- The demo recording script was re-run against `alpha.6` and completes; that recording was not published. The published video is the `alpha.5` one, whose duration (20 s), size (1280x720) and final frame were checked.
 - The database upgrade was tested on a copy of an existing local database.
 - Git history was scanned for credentials, data files and private material before publication. None was found.
 
@@ -73,6 +84,8 @@ These need a person, and none has been done:
 - **Assistive technology**: screen readers, and keyboard use by a person.
 - **Real pointer use**: hover on the chart was not exercised by the automated checks.
 - `npm run dev` was not re-run after Increment 3.
+- Dollar amounts were checked in an English (US) browser locale only. In other locales the browser may write the same USD figure as "US$" or with the symbol after the number.
+- At 390px wide the percentage labels above the chart crowd together. This was already so before the summary change and was left alone.
 - Large files and the 20 MB import limit were not exercised.
 
 ## Running it locally
@@ -95,7 +108,7 @@ npm run build && npm run check:browser    # needs Chrome; writes screenshots
 npm run build && npm run demo:record      # writes demo/out/valynce-pareto-demo.mp4
 ```
 
-To reproduce the tagged alpha exactly: `git checkout v0.1.0-alpha.4 && npm ci && npm run build && npm test`.
+To reproduce the tagged alpha exactly: `git checkout v0.1.0-alpha.6 && npm ci && npm run build && npm test`.
 
 ## When work resumes
 

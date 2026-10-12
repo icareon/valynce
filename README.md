@@ -30,7 +30,7 @@
 <p align="center">
   <a href="https://github.com/icareon/valynce/releases/download/v0.1.0-alpha.5/valynce-pareto-demo.mp4"><strong>Watch the 20-second demo</strong></a>:
   the same ten reports ranked three ways, with a different category on top each time.<br />
-  <sub>Every screenshot and the demo use synthetic data that ships with the project.</sub>
+  <sub>Every screenshot and the demo use synthetic data that ships with the project. The video was recorded with <code>v0.1.0-alpha.5</code>, before the summary was restyled.</sub>
 </p>
 
 ---
@@ -54,7 +54,7 @@ A new installation starts empty. From there:
 - **Load demo data** adds 24 synthetic reports, clearly tagged, which you can remove again with one click.
 - **Import** takes a CSV file. To see the Pareto analysis at its clearest, import [`fixtures/pareto-check.csv`](fixtures/pareto-check.csv), then switch the metric on the Overview. Labeling leads by report count, Dimensional by affected quantity and Material by recorded cost.
 
-To run exactly the tagged alpha, check it out before installing: `git checkout v0.1.0-alpha.5`.
+To run exactly the tagged alpha, check it out before installing: `git checkout v0.1.0-alpha.6`.
 
 Valynce is not published to npm yet, so there is no `npx` command.
 
@@ -66,7 +66,7 @@ Valynce is not published to npm yet, so there is no `npx` command.
 | **No guessing** | A date such as `03/04/2026` or a number such as `1,234` can be read two ways. When the file does not settle it, you choose, and the preview shows how each number will be read. |
 | **Source traceability** | Each imported report keeps its file name, row number and original cells. An import can be undone, which removes exactly the reports it added. |
 | **Pareto analysis** | Ranks defect categories by NCR count, affected quantity or recorded cost, with share of total and cumulative share. Select a category to list its reports. |
-| **Separate currencies and units** | Dollars are never added to euros, or pieces to kilograms. Each gets its own total and its own ranking. |
+| **Nothing added that cannot be** | Pieces are never added to kilograms: each unit gets its own total and ranking. Cost totals and the cost ranking show US dollars only for now. A cost in another currency, or with no currency stated, is kept exactly as recorded and counted beside the figure; it is never converted or treated as zero. |
 | **Light and dark themes** | Switch from the top right. The choice is remembered on your computer. |
 | **Local persistence** | Reports live in a SQLite database on your machine and survive restarts and updates. |
 | **CSV export** | Exports the ranking on screen, using the same reports as the chart. |
@@ -111,12 +111,12 @@ Valynce is not published to npm yet, so there is no `npx` command.
 Three rules hold everywhere:
 
 - **Missing is not zero.** A value that was not recorded is shown as "—" or "Not recorded" and is left out of sums. Every total and every chart says how many reports it covers.
-- **Nothing is assumed.** A cost with no stated currency is shown as "Currency unspecified". It is never taken to be dollars and never added to costs in a known currency.
+- **Nothing is assumed.** A cost with no stated currency is shown as "Currency unspecified". It is never taken to be dollars and never added to costs in a known currency. If a file has no currency column, you can tick "All costs in this file are USD" during import; Valynce does not do it for you.
 - **A ranking is not a cause.** The Pareto chart shows where reports, quantity or cost are recorded. It does not show why, and the leading category is not a verified root cause.
 
 ## Alpha limitations
 
-This is an early alpha, `v0.1.0-alpha.5`. Expect rough edges.
+This is an early alpha, `v0.1.0-alpha.6`. Expect rough edges.
 
 - **Checked on one platform.** Development and automated checks ran on macOS with Chrome. Windows, Linux desktops, Safari, Firefox and screen readers have not been checked by hand. CI runs installation, type checking, tests and the build on Linux.
 - **CSV only, UTF-8 only.** Files need a header row and comma, semicolon or tab separators, up to 20 MB. Excel workbooks are not read.
@@ -124,6 +124,7 @@ This is an early alpha, `v0.1.0-alpha.5`. Expect rough edges.
 - **Duplicates are skipped.** A row whose NCR ID is already stored is reported and left out. There is no option to update a stored report from a file.
 - **Export is the ranking only.** Exporting the reports themselves is not built yet.
 - **One grouping.** The Pareto chart groups by defect category only.
+- **Cost analysis in USD only.** The cost total and cost ranking cover costs stated in US dollars. Other currencies are stored and listed, and counted as left out, but not totalled or ranked yet.
 - **Built-in SQLite.** Storage uses Node's `node:sqlite` module, which Node labels a release candidate.
 - **No AI features.** See below.
 

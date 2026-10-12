@@ -9,6 +9,7 @@ import type {
   ImportOptions,
   PlannedRow,
 } from '../modules/quality/importRules.ts';
+import { REPORTING_CURRENCY } from '../modules/quality/totals.ts';
 import type { ImportCommitResponse, ImportPreviewResponse } from '../server/contract.ts';
 import { commitImport, previewImport, removeImport } from './api.ts';
 import { Cost, Quantity, Text, Unknown } from './bits.tsx';
@@ -212,7 +213,10 @@ export function ImportView(props: { imports: ImportBatch[]; onChanged: () => Pro
 
   const setMapping = (field: ImportField, column: number | null) => {
     if (file === null || preview === null) return;
-    void runPreview(file, { ...preview.mapping, [field]: column }, preview.options);
+    // A currency chosen for the file belongs to the column layout it was chosen under, so it does not carry over.
+    const options = field === 'currency' || field === 'cost' ? { ...preview.options, defaultCurrency: null } : preview.options;
+    if (options !== preview.options) setCurrencyDraft('');
+    void runPreview(file, { ...preview.mapping, [field]: column }, options);
   };
   const setOptions = (change: Partial<ImportOptions>) => {
     if (file === null || preview === null) return;
@@ -291,6 +295,11 @@ export function ImportView(props: { imports: ImportBatch[]; onChanged: () => Pro
   const notImported = summary ? summary.errors + summary.duplicatesInFile + summary.duplicatesStored : 0;
   const canImport = preview !== null && preview.blocking.length === 0 && preview.summary.ready > 0;
   const hasDates = preview !== null && preview.mapping.openedOn !== null;
+  // Costs that take their currency from the box the user ticked, because the file has no currency column.
+  const usdConfirmed =
+    preview !== null && preview.mapping.currency === null && preview.options.defaultCurrency === REPORTING_CURRENCY
+      ? preview.costWithDefaultCurrency
+      : 0;
   const hasNumbers = preview !== null && (preview.mapping.cost !== null || preview.mapping.quantityAffected !== null);
 
   return (
@@ -416,19 +425,37 @@ export function ImportView(props: { imports: ImportBatch[]; onChanged: () => Pro
                   onChange={(e) => setUnit(e.target.value)}
                 />
               </label>
-              <label>
-                <span>Currency for costs that state none</span>
-                <input
-                  className="field short-input currency-input"
-                  type="text"
-                  inputMode="text"
-                  autoComplete="off"
-                  placeholder="Unspecified"
-                  maxLength={3}
-                  value={currencyDraft}
-                  onChange={(e) => setCurrency(e.target.value)}
-                />
-              </label>
+              {preview.mapping.currency !== null ? (
+                <label>
+                  <span>Currency for costs that state none</span>
+                  <input
+                    className="field short-input currency-input"
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    placeholder="Unspecified"
+                    maxLength={3}
+                    value={currencyDraft}
+                    onChange={(e) => setCurrency(e.target.value)}
+                  />
+                </label>
+              ) : (
+                preview.mapping.cost !== null && (
+                  // With no currency column the file cannot say what its costs are in. Only the user can, by ticking this.
+                  <label className="confirm">
+                    <span>Currency of the costs</span>
+                    <span className="confirm-row">
+                      <input
+                        type="checkbox"
+                        className="usd-confirm"
+                        checked={preview.options.defaultCurrency === REPORTING_CURRENCY}
+                        onChange={(e) => setOptions({ defaultCurrency: e.target.checked ? REPORTING_CURRENCY : null })}
+                      />
+                      All costs in this file are {REPORTING_CURRENCY}
+                    </span>
+                  </label>
+                )
+              )}
             </div>
             <p className="hint">
               {preview.detected.numberFormat !== null
@@ -436,8 +463,15 @@ export function ImportView(props: { imports: ImportBatch[]; onChanged: () => Pro
                 : preview.detected.numberFormatNeeded
                   ? `A value such as 1,234 could be 1234 or 1.234, so Valynce does not choose for you. `
                   : ''}
-              Leave the unit and currency empty unless you know them. A quantity with no unit is a whole count of pieces, and
+              Leave the unit and currency unset unless you know them. A quantity with no unit is a whole count of pieces, and
               a cost with no currency is stored as "currency unspecified".
+              {preview.mapping.currency === null && preview.mapping.cost !== null && (
+                <>
+                  {' '}
+                  This file has no currency column, so Valynce does not assume one. Tick the box only if every cost in it is
+                  in {REPORTING_CURRENCY}.
+                </>
+              )}
             </p>
 
             {preview.numberExamples.length > 0 && (
@@ -500,7 +534,14 @@ export function ImportView(props: { imports: ImportBatch[]; onChanged: () => Pro
             {preview.costWithoutCurrency > 0 && (
               <p className="hint">
                 {plural(preview.costWithoutCurrency, 'report')} to import {preview.costWithoutCurrency === 1 ? 'has' : 'have'} a
-                cost with no currency. {preview.costWithoutCurrency === 1 ? 'It' : 'They'} will be stored as currency unspecified.
+                cost with no currency. {preview.costWithoutCurrency === 1 ? 'It' : 'They'} will be stored as currency unspecified
+                and left out of the {REPORTING_CURRENCY} cost total and ranking.
+              </p>
+            )}
+            {usdConfirmed > 0 && (
+              <p className="hint usd-note">
+                {plural(usdConfirmed, 'cost')} will be stored as {REPORTING_CURRENCY} because you confirmed that all costs in this
+                file are {REPORTING_CURRENCY}.
               </p>
             )}
 

@@ -295,6 +295,8 @@ export interface ImportPlan {
   summary: ImportSummary;
   /** Ready rows that have a cost but no currency. They will be stored as "currency unspecified". */
   costWithoutCurrency: number;
+  /** Ready rows whose cost takes its currency from the import setting, because the row itself states none. */
+  costWithDefaultCurrency: number;
 }
 
 const COMPARED: readonly (keyof NcrFields)[] = [
@@ -409,6 +411,7 @@ export function planImport(
   const seen = new Map<string, PlannedRow>();
   const summary: ImportSummary = { total: table.rows.length, ready: 0, errors: 0, duplicatesInFile: 0, duplicatesStored: 0, blank: 0 };
   let costWithoutCurrency = 0;
+  let costWithDefaultCurrency = 0;
 
   table.rows.forEach((cells, index) => {
     const source: Record<string, string> = {};
@@ -520,8 +523,9 @@ export function planImport(
       seen.set(ncrNumber, planned);
       summary.ready += 1;
       if (costCents !== null && currency === null) costWithoutCurrency += 1;
+      if (costCents !== null && currency !== null && rawCurrency === '') costWithDefaultCurrency += 1;
     }
   });
 
-  return { blocking, rows, summary, costWithoutCurrency };
+  return { blocking, rows, summary, costWithoutCurrency, costWithDefaultCurrency };
 }

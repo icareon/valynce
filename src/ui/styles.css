@@ -501,7 +501,7 @@ select.field {
   font-style: italic;
 }
 
-/* ---------- Panels and metric cards ---------- */
+/* ---------- Panels and the summary ---------- */
 
 .card {
   background: var(--panel);
@@ -513,25 +513,29 @@ select.field {
   padding: var(--space-4);
 }
 
-/* One compact row of three cells. Each cell draws a divider into the 1px gap on
-   its right and below it, so the lines are right however the cells wrap, and an
-   unfilled corner stays plain panel. Height comes from the content alone. */
+/* Three borderless groups straight on the page: thin vertical rules between
+   them and one rule underneath. No panel, no minimum height; content decides. */
 .metrics {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1px;
-  overflow: clip;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: var(--space-4);
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
 }
 
 .metric {
-  padding: var(--space-4);
-  box-shadow:
-    1px 0 0 var(--border),
-    0 1px 0 var(--border);
+  min-width: 0;
+  padding: 0 var(--space-5);
+  border-left: 1px solid var(--border);
+}
+
+.metric:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+
+.metric:last-child {
+  padding-right: 0;
 }
 
 .metric-head {
@@ -545,7 +549,6 @@ select.field {
 .metric-head .icon-btn {
   width: 22px;
   height: 22px;
-  margin-right: -4px;
 }
 
 .metric-label {
@@ -554,66 +557,56 @@ select.field {
 }
 
 .metric-value {
-  margin-top: 6px;
+  margin-top: 2px;
   font-size: var(--text-metric);
   font-weight: 600;
-  line-height: 1.2;
+  line-height: var(--metric-line);
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
-.metric-value .tag {
-  margin-left: var(--space-2);
-  vertical-align: 6px;
-}
-
-/* Several totals that cannot be added: one compact row each, as amount, unit and report count. */
-.metric-groups {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  align-items: baseline;
-  gap: 0 var(--space-2);
-  margin: 6px 0 0;
-  padding: 0;
-  list-style: none;
-}
-
-.metric-groups li {
-  display: grid;
-  grid-template-columns: subgrid;
-  grid-column: 1 / -1;
-  align-items: baseline;
-  line-height: 24px;
-}
-
-.metric-groups .amount {
-  font-size: var(--text-lg);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
-.metric-groups .unit {
+.metric-unit {
+  margin-left: 6px;
+  /* Its own line height, so the smaller text does not stretch the value's line. */
+  line-height: 1;
   color: var(--text-2);
   font-family: var(--font-mono);
   font-size: var(--text-2xs);
+  font-weight: 400;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
-.metric-groups .count {
-  color: var(--text-3);
-  font-size: var(--text-xs);
-  text-align: right;
+/* Totals in several units sit side by side at a smaller size, on the same line height. */
+.metric-value.is-split {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-4);
+  font-size: var(--text-xl);
+}
+
+/* A sentence in place of a figure, such as "No USD costs recorded." */
+.metric-value.is-empty {
+  color: var(--text-2);
+  font-size: var(--text-md);
+  font-weight: 400;
+  letter-spacing: 0;
 }
 
 .metric-coverage {
-  margin-top: var(--space-2);
+  margin-top: 2px;
   color: var(--text-3);
   font-size: var(--text-xs);
 }
 
-.metric-help,
+.metric-help {
+  margin-top: var(--space-2);
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
 .pareto-help {
   margin-top: var(--space-3);
   padding-top: var(--space-3);
@@ -929,6 +922,21 @@ select.field {
   .pareto-overlay {
     left: calc(var(--p-pad) + 104px + var(--p-gap));
     right: calc(var(--p-pad) + 84px + 64px + var(--p-gap) * 2);
+  }
+
+  /* The choices no longer fit side by side, so they stack and fill the width. */
+  .pareto-controls .seg {
+    display: grid;
+    width: 100%;
+  }
+
+  .pareto-controls .seg button {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-strong);
+  }
+
+  .pareto-controls .seg button:last-child {
+    border-bottom: 0;
   }
 }
 
@@ -1370,6 +1378,23 @@ tbody th .tag {
   text-transform: uppercase;
 }
 
+/* A statement the user confirms by ticking it, sized to line up with the fields beside it. */
+.confirm-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-h);
+  color: var(--text);
+  font-size: var(--text-sm);
+}
+
+.confirm-row input {
+  width: var(--icon);
+  height: var(--icon);
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .currency-input::placeholder {
   text-transform: none;
 }
@@ -1621,6 +1646,26 @@ td.actions .btn + .btn {
   .local,
   .col-count:last-of-type {
     display: none;
+  }
+
+  /* The summary stacks, with the rules turned to run between the groups. */
+  .metrics {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .metric,
+  .metric:last-child {
+    padding: var(--space-3) 0 0;
+    border-left: 0;
+  }
+
+  .metric + .metric {
+    margin-top: var(--space-3);
+    border-top: 1px solid var(--border);
+  }
+
+  .metric:first-child {
+    padding-top: 0;
   }
 
   .view {

@@ -49,6 +49,8 @@ export interface ImportPreviewResponse {
   blocking: string[];
   summary: ImportSummary;
   costWithoutCurrency: number;
+  /** Reports to import whose cost takes its currency from the import setting. */
+  costWithDefaultCurrency: number;
   /** Every row that will not be imported, up to a limit. */
   skippedRows: PlannedRow[];
   /** The first rows that will be imported. */

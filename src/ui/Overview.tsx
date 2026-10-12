@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { paretoCsv, PARETO_METRICS, unitLabel } from '../modules/quality/pareto.ts';
 import type { ParetoMetric, ParetoResult, ParetoRow, ParetoSeries } from '../modules/quality/pareto.ts';
+import { costInCurrency, REPORTING_CURRENCY } from '../modules/quality/totals.ts';
 import type { NcrTotals } from '../modules/quality/totals.ts';
 import { Icon, Unknown } from './bits.tsx';
 import { formatCost, formatPercent, formatQuantity, formatWhole, plural } from './format.ts';
@@ -33,76 +34,35 @@ function Metric(props: { label: string; value: ReactNode; coverage: string; help
   );
 }
 
-/** Several totals that cannot be added: one compact row each, never a combined figure. */
-function Groups({ items }: { items: { key: string; amount: string; unit: string; reports: number }[] }) {
-  return (
-    <ul className="metric-groups">
-      {items.map((item) => (
-        <li key={item.key}>
-          <span className="amount">{item.amount}</span>
-          <span className="unit">{item.unit}</span>
-          <span className="count">{plural(item.reports, 'report')}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
+/** One total per unit, side by side on one line. Quantities in different units are never added together. */
 function QuantityValue({ totals }: { totals: NcrTotals }) {
   const { groups } = totals.quantity;
-  const [only] = groups;
-  if (only === undefined) {
+  if (groups.length === 0) {
     return (
       <div className="metric-value">
         <Unknown />
       </div>
     );
   }
-  if (groups.length === 1) return <div className="metric-value">{formatQuantity(only.sum, only.unit)}</div>;
   return (
-    <Groups
-      items={groups.map((group) => ({
-        key: group.unit ?? 'pieces',
-        amount: formatQuantity(group.sum, null),
-        unit: group.unit ?? 'units',
-        reports: group.recorded,
-      }))}
-    />
-  );
-}
-
-function CostValue({ totals }: { totals: NcrTotals }) {
-  const { groups } = totals.cost;
-  const [only] = groups;
-  if (only === undefined) {
-    return (
-      <div className="metric-value">
-        <Unknown />
-      </div>
-    );
-  }
-  if (groups.length === 1) {
-    return (
-      <div className="metric-value">
-        {formatCost(only.sumCents, only.currency)}
-        {only.currency === null && <span className="tag">Currency unspecified</span>}
-      </div>
-    );
-  }
-  return (
-    <Groups
-      items={groups.map((group) => ({
-        key: group.currency ?? 'unspecified',
-        amount: formatCost(group.sumCents, group.currency),
-        unit: group.currency ?? 'Currency unspecified',
-        reports: group.recorded,
-      }))}
-    />
+    <div className={`metric-value${groups.length > 1 ? ' is-split' : ''}`}>
+      {groups.map((group) => (
+        <span className="metric-part" key={group.unit ?? '\u0000pieces'}>
+          {formatQuantity(group.sum, null)}
+          <span className="metric-unit">{group.unit ?? 'units'}</span>
+        </span>
+      ))}
+    </div>
   );
 }
 
 export function MetricCards({ totals, categorized }: { totals: NcrTotals; categorized: number }) {
   const n = totals.recordCount;
+  const cost = costInCurrency(totals.cost, REPORTING_CURRENCY);
+  const others =
+    cost.otherCurrency === 0
+      ? ''
+      : ` ${plural(cost.otherCurrency, 'report')} ${cost.otherCurrency === 1 ? 'has' : 'have'} a cost in another currency or with no currency stated. ${cost.otherCurrency === 1 ? 'It is' : 'They are'} kept as recorded, not converted and not counted as zero.`;
   return (
     <section className="metrics" aria-label="Totals for all stored reports">
       <Metric
@@ -118,10 +78,16 @@ export function MetricCards({ totals, categorized }: { totals: NcrTotals; catego
         help="The quantity the reports say was affected, added up. With no unit it is a count of pieces. A report with no quantity is left out of the sum; it is not counted as zero. Quantities in different units are never added together."
       />
       <Metric
-        label="Recorded cost"
-        value={<CostValue totals={totals} />}
-        coverage={`Cost in ${formatWhole(totals.cost.recorded)} of ${formatWhole(n)} reports`}
-        help="Cost as written on the reports, added up per currency. It is not an estimate of the total cost of poor quality. A report with no cost is left out of the sum, and amounts in different or unstated currencies are never added together."
+        label={`Recorded cost (${REPORTING_CURRENCY})`}
+        value={
+          cost.sumCents === null ? (
+            <div className="metric-value is-empty">No {REPORTING_CURRENCY} costs recorded.</div>
+          ) : (
+            <div className="metric-value">{formatCost(cost.sumCents, REPORTING_CURRENCY)}</div>
+          )
+        }
+        coverage={`${REPORTING_CURRENCY} cost recorded in ${formatWhole(cost.recorded)} of ${formatWhole(n)} reports`}
+        help={`Cost as written on the reports, added up for the reports that state it in ${REPORTING_CURRENCY}. It is not an estimate of the total cost of poor quality. A report with no cost is left out of the sum.${others}`}
       />
     </section>
   );
@@ -132,7 +98,12 @@ export function MetricCards({ totals, categorized }: { totals: NcrTotals; catego
 const METRIC_LABELS: Record<ParetoMetric, { button: string; title: string; noun: string; column: string }> = {
   count: { button: 'NCR reports', title: 'NCR reports by category', noun: 'reports', column: 'Reports' },
   quantity: { button: 'Affected quantity', title: 'Affected quantity by category', noun: 'affected quantity', column: 'Quantity' },
-  cost: { button: 'Recorded cost', title: 'Recorded cost by category', noun: 'recorded cost', column: 'Cost' },
+  cost: {
+    button: `Recorded cost (${REPORTING_CURRENCY})`,
+    title: `Recorded cost (${REPORTING_CURRENCY}) by category`,
+    noun: 'recorded cost',
+    column: 'Cost',
+  },
 };
 
 const AXIS_TICKS = [0, 25, 50, 75, 100];
@@ -144,11 +115,6 @@ function displayValue(metric: ParetoMetric, value: number, unit: string | null):
   return formatCost(value, unit);
 }
 
-function seriesName(metric: ParetoMetric, unit: string | null): string {
-  if (metric === 'quantity') return unit ?? 'Units';
-  return unit ?? 'Unspecified';
-}
-
 function coverageText(result: ParetoResult, series: ParetoSeries | undefined): string {
   const n = formatWhole(result.population);
   if (result.metric === 'count') {
@@ -157,13 +123,22 @@ function coverageText(result: ParetoResult, series: ParetoSeries | undefined): s
       ? `All ${n} reports are ranked, and each states a category.`
       : `All ${n} reports are ranked. ${plural(uncategorized, 'report')} ${uncategorized === 1 ? 'states' : 'state'} no category and ${uncategorized === 1 ? 'is' : 'are'} shown as Uncategorized.`;
   }
-  const what = result.metric === 'quantity' ? 'quantity' : 'cost';
-  const left = result.missing === 0 ? '' : ` ${plural(result.missing, 'report')} with no ${what} ${result.missing === 1 ? 'is' : 'are'} not ranked; ${result.missing === 1 ? 'it is' : 'they are'} not treated as zero.`;
+  if (result.metric === 'cost') {
+    // The ranking is of one currency only; say what that leaves out, and that none of it is zero.
+    const other =
+      result.excluded === 0
+        ? ''
+        : ` ${plural(result.excluded, 'report')} with a cost in another currency or with no currency stated ${result.excluded === 1 ? 'is' : 'are'} not ranked and not converted.`;
+    const none = result.missing === 0 ? '' : ` ${plural(result.missing, 'report')} with no cost ${result.missing === 1 ? 'is' : 'are'} not ranked.`;
+    const notZero = result.excluded + result.missing === 0 ? '' : ' None of these is treated as zero.';
+    return `${REPORTING_CURRENCY} cost recorded in ${formatWhole(result.recorded)} of ${n} reports.${other}${none}${notZero}`;
+  }
+  const left = result.missing === 0 ? '' : ` ${plural(result.missing, 'report')} with no quantity ${result.missing === 1 ? 'is' : 'are'} not ranked; ${result.missing === 1 ? 'it is' : 'they are'} not treated as zero.`;
   const split =
     result.series.length > 1 && series !== undefined
-      ? ` This ranking covers the ${formatWhole(series.recorded)} in ${unitLabel(result.metric, series.unit)}; other ${result.metric === 'quantity' ? 'units' : 'currencies'} are ranked separately.`
+      ? ` This ranking covers the ${formatWhole(series.recorded)} in ${unitLabel(result.metric, series.unit)}; other units are ranked separately.`
       : '';
-  return `${what === 'quantity' ? 'Quantity' : 'Cost'} recorded in ${formatWhole(result.recorded)} of ${n} reports.${left}${split}`;
+  return `Quantity recorded in ${formatWhole(result.recorded)} of ${n} reports.${left}${split}`;
 }
 
 function download(name: string, text: string) {
@@ -185,7 +160,7 @@ export function ParetoPanel(props: {
   /** Reports per category in that same population, whether or not they have a value for the metric. */
   categoryCounts: ReadonlyMap<string | null, number>;
   onMetric: (metric: ParetoMetric) => void;
-  /** The currency or unit being ranked, when the metric has more than one. */
+  /** The quantity unit being ranked, when there is more than one. */
   seriesUnit: string | null | undefined;
   onSeries: (unit: string | null) => void;
   selected: string | null | undefined;
@@ -198,7 +173,7 @@ export function ParetoPanel(props: {
   const [hovered, setHovered] = useState<string | null | undefined>(undefined);
   const helpId = useId();
 
-  // Fall back to the currency or unit most of these reports use if the wanted one is not among them.
+  // Fall back to the unit most of these reports use if the wanted one is not among them.
   const series =
     result.series.find((s) => props.seriesUnit !== undefined && s.unit === props.seriesUnit) ??
     [...result.series].sort((a, b) => b.recorded - a.recorded)[0];
@@ -245,8 +220,8 @@ export function ParetoPanel(props: {
               </button>
             ))}
           </div>
-          {result.series.length > 1 && series !== undefined && (
-            <div className="seg" role="group" aria-label={metric === 'quantity' ? 'Unit to rank' : 'Currency to rank'}>
+          {metric === 'quantity' && result.series.length > 1 && series !== undefined && (
+            <div className="seg" role="group" aria-label="Unit to rank">
               {result.series.map((option) => (
                 <button
                   key={option.unit ?? '\u0000none'}
@@ -254,7 +229,7 @@ export function ParetoPanel(props: {
                   aria-pressed={option.unit === series.unit}
                   onClick={() => props.onSeries(option.unit)}
                 >
-                  {seriesName(metric, option.unit)} · {formatWhole(option.recorded)}
+                  {option.unit ?? 'Units'} · {formatWhole(option.recorded)}
                 </button>
               ))}
             </div>
@@ -304,8 +279,9 @@ export function ParetoPanel(props: {
           </li>
           <li>
             <strong>NCR reports</strong> counts each report once. <strong>Affected quantity</strong> adds the quantities
-            reported, one unit at a time. <strong>Recorded cost</strong> adds the costs written on the reports, one currency
-            at a time.
+            reported, one unit at a time. <strong>Recorded cost ({REPORTING_CURRENCY})</strong> adds the costs the reports
+            state in {REPORTING_CURRENCY}. Costs in other currencies, or with no currency stated, are kept as recorded and
+            are not converted or ranked here.
           </li>
           <li>
             The chart, the table below it and the exported file all use the same reports: those matching the search and
@@ -316,10 +292,12 @@ export function ParetoPanel(props: {
 
       {result.population === 0 ? (
         <p className="pareto-empty">No reports match the current search and status filter, so there is nothing to rank.</p>
+      ) : series === undefined && metric === 'cost' ? (
+        <p className="pareto-empty">No {REPORTING_CURRENCY} costs recorded. There is nothing to rank by recorded cost.</p>
       ) : series === undefined ? (
         <p className="pareto-empty">
-          None of the {plural(result.population, 'report')} {result.population === 1 ? 'states' : 'state'} a{' '}
-          {metric === 'quantity' ? 'quantity' : 'cost'}, so there is nothing to rank by {labels.noun}.
+          None of the {plural(result.population, 'report')} {result.population === 1 ? 'states' : 'state'} a quantity, so there is
+          nothing to rank by {labels.noun}.
         </p>
       ) : (
         <>

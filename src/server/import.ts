@@ -136,6 +136,7 @@ export function registerImportRoutes(app: Hono, storage: NcrStorage): void {
       blocking: plan.blocking,
       summary: plan.summary,
       costWithoutCurrency: plan.costWithoutCurrency,
+      costWithDefaultCurrency: plan.costWithDefaultCurrency,
       ...skipped(plan),
       readyRows: plan.rows.filter((row) => row.status === 'ready').slice(0, READY_PREVIEWED),
     };

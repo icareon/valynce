@@ -40,6 +40,11 @@ export interface ParetoResult {
   recorded: number;
   /** Reports with no value for the metric. They appear in no series. */
   missing: number;
+  /**
+   * Reports that have a cost, but not in the one currency the ranking was limited to.
+   * They appear in no series and are not converted. Zero unless `costCurrency` was given.
+   */
+  excluded: number;
   series: ParetoSeries[];
 }
 
@@ -55,18 +60,33 @@ function measure(record: ParetoInput, metric: ParetoMetric): { unit: string | nu
   return record.costCents === null ? null : { unit: record.currency, value: record.costCents };
 }
 
+export interface ParetoOptions {
+  /**
+   * Rank cost in this currency only. A cost in another currency, or with none
+   * stated, is counted as excluded: it is not converted and not treated as zero.
+   */
+  costCurrency?: string;
+}
+
 /**
  * Ranks defect categories by the chosen metric over exactly the records given.
- * Every record is accounted for: it is either in one series or counted as missing.
+ * Every record is accounted for: it is in one series, counted as missing, or
+ * counted as excluded because its cost is not in the currency asked for.
  */
-export function computePareto(records: readonly ParetoInput[], metric: ParetoMetric): ParetoResult {
+export function computePareto(records: readonly ParetoInput[], metric: ParetoMetric, options: ParetoOptions = {}): ParetoResult {
   const bySeries = new Map<string | null, Map<string | null, { value: number; records: number }>>();
+  const onlyCurrency = metric === 'cost' ? options.costCurrency : undefined;
   let missing = 0;
+  let excluded = 0;
 
   for (const record of records) {
     const measured = measure(record, metric);
     if (measured === null) {
       missing += 1;
+      continue;
+    }
+    if (onlyCurrency !== undefined && measured.unit !== onlyCurrency) {
+      excluded += 1;
       continue;
     }
     const categories = bySeries.get(measured.unit) ?? new Map<string | null, { value: number; records: number }>();
@@ -107,7 +127,7 @@ export function computePareto(records: readonly ParetoInput[], metric: ParetoMet
     return a.unit.localeCompare(b.unit);
   });
 
-  return { metric, population: records.length, recorded: records.length - missing, missing, series };
+  return { metric, population: records.length, recorded: records.length - missing - excluded, missing, excluded, series };
 }
 
 /** A value in plain digits with a point as the decimal separator, for files rather than screens. */
@@ -137,8 +157,8 @@ const METRIC_NAMES: Record<ParetoMetric, string> = {
 
 /**
  * One series as CSV, built from the same result the chart draws, so the file
- * and the screen cannot disagree. Every row repeats the metric, unit and the
- * number of reports analysed, so the file explains itself.
+ * and the screen cannot disagree. Every row repeats the metric, unit, the number
+ * of reports analysed and how many were left out, so the file explains itself.
  */
 export function paretoCsv(result: ParetoResult, series: ParetoSeries): string {
   const percent = (share: number | null) => (share === null ? '' : (share * 100).toFixed(2));
@@ -153,6 +173,7 @@ export function paretoCsv(result: ParetoResult, series: ParetoSeries): string {
     'metric',
     'reports_analysed',
     'reports_with_a_value_for_metric',
+    'reports_with_a_cost_in_another_or_no_currency',
   ];
   const lines = series.rows.map((row, index) =>
     [
@@ -166,6 +187,7 @@ export function paretoCsv(result: ParetoResult, series: ParetoSeries): string {
       METRIC_NAMES[result.metric],
       String(result.population),
       String(result.recorded),
+      String(result.excluded),
     ]
       .map(csvCell)
       .join(','),

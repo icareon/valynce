@@ -44,7 +44,7 @@ CI runs installation, type checking, the tests and the build on Linux for every 
 [AGENTS.md](AGENTS.md) holds the rules that keep the analysis trustworthy. The ones that matter most:
 
 - A value that was not recorded stays "not recorded". Never fill it with zero or a guess.
-- Never add amounts in different currencies, or quantities in different units.
+- Never add amounts in different currencies, or quantities in different units. Cost totals and the cost ranking show USD only; never convert another currency or label an unstated one as USD.
 - Reading a file never guesses. If a date or number could mean two things, the user chooses.
 - A ranking shows where, not why. Do not call the leading category a cause.
 - Tests should fail if the behaviour were wrong. Prefer a fixture small enough to check by hand.

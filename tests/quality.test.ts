@@ -7,7 +7,7 @@ import type { NcrFields } from '../src/core/ncr.ts';
 import { fieldOptions, filterRecords, NO_FILTER } from '../src/modules/quality/filter.ts';
 import { planImport, suggestMapping } from '../src/modules/quality/importRules.ts';
 import { computePareto, paretoCsv, PARETO_METRICS } from '../src/modules/quality/pareto.ts';
-import { computeTotals } from '../src/modules/quality/totals.ts';
+import { computeTotals, costInCurrency, REPORTING_CURRENCY } from '../src/modules/quality/totals.ts';
 import { loadSampleRecords } from '../src/server/sample.ts';
 
 const root = resolve(import.meta.dirname, '..');
@@ -79,6 +79,32 @@ test('costs in different or unstated currencies are never added together', () =>
     recorded: 5,
     missing: 1,
   });
+});
+
+test('the USD cost total holds only costs stated in USD and counts what it leaves out', () => {
+  const totals = computeTotals([
+    { ...q(null), ...c(100, 'USD') },
+    { ...q(null), ...c(200, 'EUR') },
+    { ...q(null), ...c(400) },
+    { ...q(null), ...c(800, 'USD') },
+    { ...q(null), ...c(null) },
+  ]);
+  assert.equal(REPORTING_CURRENCY, 'USD');
+  // 1.00 + 8.00. The euro and the unstated amounts are not converted, relabelled or added.
+  assert.deepEqual(costInCurrency(totals.cost, 'USD'), { currency: 'USD', sumCents: 900, recorded: 2, otherCurrency: 2, missing: 1 });
+  // They are still in the totals, untouched.
+  assert.deepEqual(totals.cost.groups.filter((g) => g.currency !== 'USD'), [
+    { currency: 'EUR', sumCents: 200, recorded: 1 },
+    { currency: null, sumCents: 400, recorded: 1 },
+  ]);
+});
+
+test('no USD cost is reported as none, not as zero', () => {
+  const none = computeTotals([{ ...q(null), ...c(200, 'EUR') }, { ...q(null), ...c(400) }, { ...q(null), ...c(null) }]);
+  assert.deepEqual(costInCurrency(none.cost, 'USD'), { currency: 'USD', sumCents: null, recorded: 0, otherCurrency: 2, missing: 1 });
+  // A recorded zero in USD is a real total of zero.
+  const zero = computeTotals([{ ...q(null), ...c(0, 'USD') }]);
+  assert.equal(costInCurrency(zero.cost, 'USD').sumCents, 0);
 });
 
 test('quantities in different units are never added together', () => {
@@ -183,7 +209,7 @@ test('Pareto totals agree with the overview totals for the same records', () => 
 });
 
 test('an empty set, a set with no values and a zero total are each reported as what they are', () => {
-  assert.deepEqual(computePareto([], 'cost'), { metric: 'cost', population: 0, recorded: 0, missing: 0, series: [] });
+  assert.deepEqual(computePareto([], 'cost'), { metric: 'cost', population: 0, recorded: 0, missing: 0, excluded: 0, series: [] });
 
   const noCosts = computePareto([{ defectCategory: 'A', ...q(1), ...c(null) }], 'cost');
   assert.deepEqual([noCosts.population, noCosts.recorded, noCosts.missing, noCosts.series.length], [1, 0, 1, 0]);
@@ -233,7 +259,7 @@ test('the chart, the table and the export describe the same population under a f
         }
         const exported = paretoCsv(result, series).trimEnd().split('\r\n').slice(1);
         assert.equal(exported.length, series.rows.length);
-        assert.ok(exported.every((line) => line.endsWith(`,${population.length},${result.recorded}`)));
+        assert.ok(exported.every((line) => line.endsWith(`,${population.length},${result.recorded},${result.excluded}`)));
       }
     }
   }
@@ -242,23 +268,61 @@ test('the chart, the table and the export describe the same population under a f
   assert.deepEqual([open.population, open.series[0]?.rows.length], [4, 4]);
 });
 
+test('a cost ranking limited to USD leaves other costs out without converting them or ranking them as zero', () => {
+  const result = computePareto(check, 'cost', { costCurrency: 'USD' });
+  // Ten reports: 7 state a cost in USD, PC-009 states 300.00 EUR, PC-004 and PC-010 state no cost.
+  assert.deepEqual([result.population, result.recorded, result.excluded, result.missing], [10, 7, 1, 2]);
+  assert.equal(result.series.length, 1);
+  const [usd] = result.series;
+  // 850.00 + 100.00 + 50.00 = 1,000.00 USD, the same as the dollar series of the unrestricted ranking.
+  assert.deepEqual(usd, computePareto(check, 'cost').series.find((s) => s.unit === 'USD'));
+  assert.equal(usd?.total, 100_000);
+  // Each bar is the sum of the USD costs on the reports of that category, and of nothing else.
+  for (const row of usd!.rows) {
+    const contributing = check.filter((r) => r.defectCategory === row.category && r.costCents !== null && r.currency === 'USD');
+    assert.equal(row.records, contributing.length);
+    assert.equal(row.value, contributing.reduce((sum, r) => sum + r.costCents!, 0));
+  }
+  // Material's bar is the 850.00 USD report alone; the 300.00 EUR report in the same category adds nothing.
+  assert.deepEqual([usd?.rows[0]?.category, usd?.rows[0]?.value, usd?.rows[0]?.records], ['Material', 85_000, 1]);
+  // The ranking matches the summary figure for the same reports.
+  const cost = costInCurrency(computeTotals(check).cost, 'USD');
+  assert.deepEqual([cost.sumCents, cost.recorded, cost.otherCurrency, cost.missing], [usd?.total, result.recorded, result.excluded, result.missing]);
+
+  // Unstated currencies are excluded too, never taken to be USD.
+  const mixed = computePareto(
+    [
+      { defectCategory: 'A', ...q(1), ...c(500) },
+      { defectCategory: 'A', ...q(1), ...c(700, 'EUR') },
+    ],
+    'cost',
+    { costCurrency: 'USD' },
+  );
+  assert.deepEqual([mixed.recorded, mixed.excluded, mixed.missing, mixed.series.length], [0, 2, 0, 0]);
+
+  // The option changes nothing for the other metrics.
+  assert.deepEqual(computePareto(check, 'count', { costCurrency: 'USD' }), computePareto(check, 'count'));
+  assert.deepEqual(computePareto(check, 'quantity', { costCurrency: 'USD' }), computePareto(check, 'quantity'));
+});
+
 test('the export states rank, value, unit, share and cumulative share for each category', () => {
-  const result = computePareto(check, 'cost');
+  // As the app exports it: USD only, with the euro report counted in the last column rather than dropped silently.
+  const result = computePareto(check, 'cost', { costCurrency: 'USD' });
   const usd = result.series.find((s) => s.unit === 'USD')!;
   assert.equal(
     paretoCsv(result, usd),
     [
-      'rank,defect_category,value,unit,share_percent,cumulative_percent,contributing_reports,metric,reports_analysed,reports_with_a_value_for_metric',
-      '1,Material,850.00,USD,85.00,85.00,1,Recorded cost,10,8',
-      '2,Labeling,100.00,USD,10.00,95.00,3,Recorded cost,10,8',
-      '3,Dimensional,50.00,USD,5.00,100.00,3,Recorded cost,10,8',
+      'rank,defect_category,value,unit,share_percent,cumulative_percent,contributing_reports,metric,reports_analysed,reports_with_a_value_for_metric,reports_with_a_cost_in_another_or_no_currency',
+      '1,Material,850.00,USD,85.00,85.00,1,Recorded cost,10,7,1',
+      '2,Labeling,100.00,USD,10.00,95.00,3,Recorded cost,10,7,1',
+      '3,Dimensional,50.00,USD,5.00,100.00,3,Recorded cost,10,7,1',
       '',
     ].join('\r\n'),
   );
   const pieces = computePareto(check, 'quantity');
-  assert.match(paretoCsv(pieces, pieces.series[1]!), /\r\n1,Material,2\.5,kg,100\.00,100\.00,1,Affected quantity,10,9\r\n$/);
+  assert.match(paretoCsv(pieces, pieces.series[1]!), /\r\n1,Material,2\.5,kg,100\.00,100\.00,1,Affected quantity,10,9,0\r\n$/);
   const counts = computePareto(check, 'count');
-  assert.match(paretoCsv(counts, counts.series[0]!), /\r\n4,Uncategorized,1,reports,10\.00,100\.00,1,NCR count,10,10\r\n$/);
+  assert.match(paretoCsv(counts, counts.series[0]!), /\r\n4,Uncategorized,1,reports,10\.00,100\.00,1,NCR count,10,10,0\r\n$/);
 });
 
 test('exported category names cannot run as spreadsheet formulas or break the columns', () => {

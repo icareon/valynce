@@ -11,7 +11,8 @@
   --text-md: 14px;
   --text-lg: 16px;
   --text-xl: 20px;
-  --text-metric: 30px;
+  --text-metric: 28px;
+  --metric-line: 34px;
 
   /* Space */
   --space-1: 4px;

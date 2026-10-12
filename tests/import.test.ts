@@ -10,7 +10,7 @@ import { NcrStorage } from '../src/core/storage.ts';
 import { detectDateFormat, detectNumberFormat, numberExamples, planImport, suggestMapping } from '../src/modules/quality/importRules.ts';
 import { computePareto } from '../src/modules/quality/pareto.ts';
 import type { ImportMapping, ImportOptions } from '../src/modules/quality/importRules.ts';
-import { computeTotals } from '../src/modules/quality/totals.ts';
+import { computeTotals, costInCurrency } from '../src/modules/quality/totals.ts';
 import { createApp } from '../src/server/app.ts';
 import type { ImportCommitResponse, ImportPreviewResponse, NcrListResponse } from '../src/server/contract.ts';
 import { loadSampleRecords } from '../src/server/sample.ts';
@@ -230,6 +230,28 @@ test('a currency comes from the file or an explicit setting, and is never assume
     ['EUR', 'GBP', null, undefined, null],
   );
   assert.equal(withDefault.costWithoutCurrency, 0);
+});
+
+test('a file with no currency column gets USD only when the user confirms it, and only on rows with a cost', () => {
+  const text = 'NCR No,Cost\nN-1,10.00\nN-2,20.50\nN-3,\n';
+  const t = table(text);
+  assert.equal(suggestMapping(t.headers).currency, null);
+
+  // Nothing confirmed: the costs keep no currency and stay out of the USD total.
+  const unconfirmed = plan(text);
+  assert.deepEqual(unconfirmed.rows.map((r) => [r.fields?.costCents, r.fields?.currency]), [[1000, null], [2050, null], [null, null]]);
+  assert.deepEqual([unconfirmed.costWithoutCurrency, unconfirmed.costWithDefaultCurrency], [2, 0]);
+  const before = costInCurrency(computeTotals(unconfirmed.rows.map((r) => r.fields!)).cost, 'USD');
+  assert.deepEqual([before.sumCents, before.recorded, before.otherCurrency, before.missing], [null, 0, 2, 1]);
+
+  // Confirmed: both costs are USD, the amounts are unchanged, and the row with no cost still has none.
+  const confirmed = plan(text, { defaultCurrency: 'USD' });
+  assert.deepEqual(confirmed.rows.map((r) => [r.fields?.costCents, r.fields?.currency]), [[1000, 'USD'], [2050, 'USD'], [null, null]]);
+  assert.deepEqual([confirmed.costWithoutCurrency, confirmed.costWithDefaultCurrency], [0, 2]);
+  const after = costInCurrency(computeTotals(confirmed.rows.map((r) => r.fields!)).cost, 'USD');
+  assert.deepEqual([after.sumCents, after.recorded, after.otherCurrency, after.missing], [3050, 2, 0, 1]);
+  // The file's own cells are kept as they were, so the record can be traced back.
+  assert.deepEqual(confirmed.rows[0]?.source, { 'NCR No': 'N-1', Cost: '10.00' });
 });
 
 test('quantities must be whole numbers, and every problem in a row is reported', () => {

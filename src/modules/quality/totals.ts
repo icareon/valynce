@@ -85,3 +85,35 @@ export function computeTotals(records: readonly TotalsInput[]): NcrTotals {
     cost: { groups: costGroups, recorded: records.length - costMissing, missing: costMissing },
   };
 }
+
+/**
+ * The one currency the summary and the cost ranking show for now. Costs in any
+ * other currency, or with none stated, stay stored exactly as recorded; they are
+ * left out of these two views, never converted and never relabelled.
+ */
+export const REPORTING_CURRENCY = 'USD';
+
+export interface CurrencyCost {
+  currency: string;
+  /** Sum of the costs stated in this currency. Null when no report states one, which is not the same as zero. */
+  sumCents: number | null;
+  /** Reports with a cost stated in this currency. */
+  recorded: number;
+  /** Reports with a cost in another currency or with no currency stated. They are not in the sum. */
+  otherCurrency: number;
+  /** Reports with no cost at all. */
+  missing: number;
+}
+
+/** The part of a cost total that is stated in one currency, with what it leaves out counted. */
+export function costInCurrency(total: CostTotal, currency: string): CurrencyCost {
+  const group = total.groups.find((g) => g.currency === currency);
+  const recorded = group?.recorded ?? 0;
+  return {
+    currency,
+    sumCents: group === undefined ? null : group.sumCents,
+    recorded,
+    otherCurrency: total.recorded - recorded,
+    missing: total.missing,
+  };
+}

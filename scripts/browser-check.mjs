@@ -377,15 +377,64 @@ async function run() {
   check('the empty state offers "Load demo data" and a link to CSV import', await page(`byText('.empty .btn', 'Load demo data') !== undefined && byText('.empty a.btn', 'Import a CSV file')?.getAttribute('href') === '#/import'`));
   await inBothThemes('empty', { sizes: [[1440, 900]] });
 
+  // --- A file with no currency column: USD only when the user confirms it ---
+  const plainCsv = join(work, 'no-currency.csv');
+  writeFileSync(plainCsv, 'NCR No,Defect Type,Qty,Cost\nNC-1,Dimensional,4,10.00\nNC-2,Labeling,2,20.50\nNC-3,Labeling,1,\n');
+  await importFile(plainCsv);
+  check('with no currency column the import offers one explicit choice, not ticked', await page(`$('.usd-confirm') !== null && !$('.usd-confirm').checked && $('.currency-input') === null && text('.confirm').includes('All costs in this file are USD')`));
+  check('until it is ticked, the costs are to be stored as currency unspecified', await page(`$$('.hint').some((el) => el.textContent.includes('2 reports to import have a cost with no currency') && el.textContent.includes('left out of the USD cost total'))`));
+  await click(`byText('.button-row .btn', 'Import 3 reports')`);
+  await waitFor(`$('.import-done') !== null`);
+  await click(`byText('.rail a', 'Overview')`);
+  await waitFor(`$$('.metric').length === 3`);
+  const unstated = await page(`$$('.metric').map((m) => [m.querySelector('.metric-value').textContent.trim(), m.querySelector('.metric-coverage').textContent])`);
+  check('costs with no stated currency are not shown as dollars: "No USD costs recorded."', unstated[2][0] === 'No USD costs recorded.' && unstated[2][1] === 'USD cost recorded in 0 of 3 reports' && !unstated[2][0].includes('$'), JSON.stringify(unstated));
+  await click(`byText('.seg button', 'Recorded cost')`);
+  await waitFor(`$('.pareto-empty') !== null`);
+  check('the cost ranking says there are no USD costs and what it leaves out', await page(`text('.pareto-empty').includes('No USD costs recorded.') && $$('.bar').length === 0 && text('#pareto-coverage').includes('USD cost recorded in 0 of 3 reports') && text('#pareto-coverage').includes('2 reports with a cost in another currency or with no currency stated are not ranked and not converted') && text('#pareto-coverage').includes('1 report with no cost is not ranked')`), await page(`text('#pareto-coverage')`));
+  check('the unstated costs are still in the records list, unchanged', await page(`$$('.records tbody td.col-cost').map((td) => td.textContent).filter((t) => t.includes('currency unspecified') && (t.includes('10.00') || t.includes('20.50'))).length === 2`));
+  await screenshot('no-usd-costs-light-1440x900');
+  await click(`byText('.seg button', 'NCR reports')`);
+  const firstImport = (await (await fetch(base + '/api/ncrs')).json()).imports[0].id;
+  await fetch(`${base}/api/imports/${firstImport}`, { method: 'DELETE' });
+  await goto();
+  await waitFor(`$('.empty') !== null`);
+
+  await importFile(plainCsv);
+  await click(`$('.usd-confirm')`);
+  await waitFor(`$('.usd-note') !== null`);
+  check('ticking the box states exactly what it will do', await page(`$('.usd-confirm').checked && text('.usd-note').includes('2 costs will be stored as USD because you confirmed') && $$('.hint').every((el) => !el.textContent.includes('will be stored as currency unspecified'))`), await page(`text('.usd-note')`));
+  await page(`($('.usd-confirm').scrollIntoView({ block: 'center' }), 0)`);
+  await inBothThemes('import-usd-confirm', { sizes: [[1440, 900]] });
+  await choose('#map-cost', 'Not in this file');
+  await waitFor(`$('.usd-confirm') === null`);
+  await choose('#map-cost', 'Cost');
+  await waitFor(`$('.usd-confirm') !== null`);
+  check('the confirmation does not carry over when the cost column changes', await page(`!$('.usd-confirm').checked && $('.usd-note') === null`));
+  await click(`$('.usd-confirm')`);
+  await waitFor(`$('.usd-note') !== null`);
+  await click(`byText('.button-row .btn', 'Import 3 reports')`);
+  await waitFor(`$('.import-done') !== null`);
+  await click(`byText('.rail a', 'Overview')`);
+  await waitFor(`$$('.metric').length === 3`);
+  const confirmedUsd = await page(`$$('.metric').map((m) => [m.querySelector('.metric-value').textContent.trim(), m.querySelector('.metric-coverage').textContent])`);
+  check('after confirmation the two costs add up to $30.50 in 2 of 3 reports', confirmedUsd[2][0] === '$30.50' && confirmedUsd[2][1] === 'USD cost recorded in 2 of 3 reports', JSON.stringify(confirmedUsd));
+  const storedUsd = (await (await fetch(base + '/api/ncrs')).json());
+  check('storage holds USD on the two rows with a cost, none on the row without, and the original cells', JSON.stringify(storedUsd.records.map((r) => [r.ncrNumber, r.costCents, r.currency, r.sourceValues.Cost]).sort()) === JSON.stringify([['NC-1', 1000, 'USD', '10.00'], ['NC-2', 2050, 'USD', '20.50'], ['NC-3', null, null, '']]), JSON.stringify(storedUsd.records.map((r) => [r.ncrNumber, r.costCents, r.currency, r.sourceValues]).sort()));
+  await fetch(`${base}/api/imports/${storedUsd.imports[0].id}`, { method: 'DELETE' });
+  await goto();
+  await waitFor(`$('.empty') !== null`);
+
   // --- Load demo data ---
   await click(`byText('.empty .btn', 'Load demo data')`);
   await waitFor(`$$('.metric').length === 3 && ${rowCount} === 24`);
   const metrics = await page(`$$('.metric').map((m) => [m.querySelector('.metric-label').textContent, m.querySelector('.metric-value')?.textContent.trim(), m.querySelector('.metric-coverage').textContent])`);
-  check('metric cards show 24 reports, 1,722 units and $20,152.50', JSON.stringify(metrics.map((m) => m[1])) === JSON.stringify(['24', '1,722', '$20,152.50']), JSON.stringify(metrics));
+  check('the summary shows 24 reports, 1,722 units and $20,152.50', JSON.stringify(metrics.map((m) => m[1])) === JSON.stringify(['24', '1,722units', '$20,152.50']), JSON.stringify(metrics));
+  check('the three groups are labelled NCR reports, Affected quantity and Recorded cost (USD)', JSON.stringify(metrics.map((m) => m[0])) === JSON.stringify(['NCR reports', 'Affected quantity', 'Recorded cost (USD)']), JSON.stringify(metrics.map((m) => m[0])));
   check('coverage labels state how many reports had a value',
     metrics[0][2] === 'Category in 22 of 24 reports' &&
     metrics[1][2] === 'Quantity in 21 of 24 reports' &&
-    metrics[2][2] === 'Cost in 20 of 24 reports', JSON.stringify(metrics.map((m) => m[2])));
+    metrics[2][2] === 'USD cost recorded in 20 of 24 reports', JSON.stringify(metrics.map((m) => m[2])));
   check('the Pareto chart starts on NCR reports', (await page(`text('#chart-title')`)) === 'NCR reports by category' && await page(`byText('.seg button', 'NCR reports').getAttribute('aria-pressed') === 'true'`));
   check('bars add up to the 24 stored reports and end at 100% cumulative', (await page(barSum)) === 24 && (await page(barValues)).at(-1)[2] === '100.0%');
   check('reports with no category have their own Uncategorized bar', await page(`byText('.bar', 'Uncategorized')?.querySelector('.bar-count').textContent === '2'`));
@@ -397,9 +446,42 @@ async function run() {
     check(`all eight table columns are visible at ${width}x${height}`, (await page(`$$('.records thead th').filter((th) => th.getBoundingClientRect().width > 40).length`)) === 8);
   }
   await viewport(1440, 900);
-  const summary = await page(`(() => { const b = $('.metrics').getBoundingClientRect(); return { height: Math.round(b.height), cells: $$('.metric').map((m) => Math.round(m.getBoundingClientRect().height)), padding: getComputedStyle($('.metric')).padding, value: getComputedStyle($('.metric-value')).fontSize, chartTop: Math.round($('.pareto').getBoundingClientRect().top) }; })()`);
-  check('the summary row is compact: 120 to 150px tall, 16px padding, 28 to 32px values', summary.height >= 120 && summary.height <= 150 && summary.padding === '16px' && parseFloat(summary.value) >= 28 && parseFloat(summary.value) <= 32, JSON.stringify(summary));
-  check('the Pareto chart starts in the top third of a 900px window', summary.chartTop <= 300, JSON.stringify(summary));
+  const SUMMARY = `(() => {
+    const row = $('.metrics');
+    const style = getComputedStyle(row);
+    const cells = $$('.metric').map((m) => getComputedStyle(m));
+    return {
+      height: Math.round(row.getBoundingClientRect().height),
+      background: style.backgroundColor,
+      radius: style.borderRadius,
+      edges: [style.borderTopWidth, style.borderLeftWidth, style.borderRightWidth, style.borderBottomWidth],
+      rule: style.borderBottomColor,
+      cellBackgrounds: cells.map((c) => c.backgroundColor),
+      separators: cells.map((c) => c.borderLeftWidth),
+      minHeights: [style.minHeight, ...cells.map((c) => c.minHeight)],
+      value: getComputedStyle($('.metric-value')).fontSize,
+      label: getComputedStyle($('.metric-label')).fontSize,
+      gapToChart: Math.round($('.pareto').getBoundingClientRect().top - row.getBoundingClientRect().bottom),
+      chartTop: Math.round($('.pareto').getBoundingClientRect().top),
+    };
+  })()`;
+  const CLEAR = 'rgba(0, 0, 0, 0)';
+  for (const [width, height] of SIZES) {
+    await viewport(width, height);
+    const s = await page(SUMMARY);
+    check(`the summary at ${width}x${height} is 80 to 100px tall with no minimum height`, s.height >= 80 && s.height <= 100 && s.minHeights.every((h) => h === '0px' || h === 'auto'), JSON.stringify(s));
+    check(`the summary at ${width}x${height} is borderless: no panel, no rounded box, thin rules between groups and one underneath`,
+      s.background === CLEAR && s.cellBackgrounds.every((c) => c === CLEAR) && s.radius === '0px' && JSON.stringify(s.edges) === JSON.stringify(['0px', '0px', '0px', '1px']) && JSON.stringify(s.separators) === JSON.stringify(['0px', '1px', '1px']), JSON.stringify(s));
+    check(`the summary at ${width}x${height} lines its three coverage lines up`, new Set(await page(`$$('.metric-coverage').map((el) => Math.round(el.getBoundingClientRect().top))`)).size === 1);
+    check(`the summary at ${width}x${height} has small labels, prominent values and the chart close below`, parseFloat(s.label) <= 12 && parseFloat(s.value) >= 26 && parseFloat(s.value) <= 32 && s.gapToChart <= 20, JSON.stringify(s));
+  }
+  await viewport(390, 800);
+  const stacked = await page(`(() => { const tops = $$('.metric').map((m) => Math.round(m.getBoundingClientRect().top)); return { tops, clipped: $$('.metric, .metric-value, .metric-coverage').filter((el) => el.scrollWidth > el.clientWidth + 1 || el.getBoundingClientRect().right > innerWidth).map((el) => el.className + ' ' + el.scrollWidth + '/' + el.clientWidth), page: document.documentElement.scrollWidth <= innerWidth + 1 }; })()`);
+  check('at 390px the three groups stack with nothing clipped', stacked.tops[0] < stacked.tops[1] && stacked.tops[1] < stacked.tops[2] && stacked.clipped.length === 0 && stacked.page, JSON.stringify(stacked));
+  await screenshot('overview-light-390x800');
+  await viewport(1440, 900);
+  const summary = await page(SUMMARY);
+  check('the Pareto chart starts within 240px of the top of the window', summary.chartTop <= 240, JSON.stringify(summary));
   for (const [width, height] of SIZES) {
     await viewport(width, height);
     await scrollModel(`overview at ${width}x${height}`);
@@ -482,7 +564,7 @@ async function run() {
   await click(`$('.theme-toggle')`);
   await waitFor(`${theme} === 'dark'`);
   const after = await page(`[text('#chart-title'), ${countText}, text('#detail-title'), $('.search input').value, byText('.bar', 'Material').getAttribute('aria-pressed')]`);
-  check('switching theme keeps the metric, filters, selected category and open record', JSON.stringify(before) === JSON.stringify(after) && before[0] === 'Recorded cost by category', JSON.stringify([before, after]));
+  check('switching theme keeps the metric, filters, selected category and open record', JSON.stringify(before) === JSON.stringify(after) && before[0] === 'Recorded cost (USD) by category', JSON.stringify([before, after]));
   check('the dark theme is neutral, with no blue or teal tint', await page(`(() => { const [r, g, b] = getComputedStyle(document.body).backgroundColor.match(/\\d+/g).map(Number); return r === g && g === b && r < 20; })()`) && (await page(`text('.theme-toggle')`)) === 'Light');
   await cdp('Page.reload');
   await waitFor(`document.readyState === 'complete' && $('.page-head') !== null`);
@@ -606,17 +688,40 @@ async function run() {
   // --- Mixed currencies ---
   await click(`byText('.rail a', 'Overview')`);
   await waitFor(`$$('.metric').length === 3`);
-  const costs = await page(`$$('.metric')[2].querySelectorAll('.metric-groups li').length === 0 ? [] : [...$$('.metric')[2].querySelectorAll('.metric-groups li')].map((li) => li.textContent.replace(/\\s+/g, ' ').trim())`);
-  check('recorded cost shows one total per currency and never a combined sum',
-    costs.length === 3 && costs[0].startsWith('€3,580.40') && costs[1].startsWith('$22,535.25') && costs[2].startsWith('210.00') && costs[2].includes('Currency unspecified'), JSON.stringify(costs));
   const mixed = await page(`$$('.metric').map((m) => [m.querySelector('.metric-value')?.textContent.trim() ?? null, m.querySelector('.metric-coverage').textContent])`);
-  const tallest = await page(`Math.round($('.metrics').getBoundingClientRect().height)`);
-  check('three currencies make the summary row taller without clipping anything', tallest > 120 && tallest <= 190 && await page(`$$('.metric-groups li').every((li) => li.scrollWidth <= li.clientWidth + 1 && li.getBoundingClientRect().bottom <= $('.metrics').getBoundingClientRect().bottom)`), String(tallest));
-  check('report and quantity totals include the imported rows', mixed[0][0] === '35' && mixed[1][0] === '2,618' && mixed[1][1] === 'Quantity in 30 of 35 reports' && mixed[2][1] === 'Cost in 29 of 35 reports', JSON.stringify(mixed));
+  // Demo data 20,152.50 plus the six USD rows of the example file, 2,382.75. The euro and unstated costs are not in it.
+  check('recorded cost shows the USD total only: $22,535.25 in 26 of 35 reports', mixed[2][0] === '$22,535.25' && mixed[2][1] === 'USD cost recorded in 26 of 35 reports' && !(await page(`text('.metrics')`)).includes('€'), JSON.stringify(mixed));
+  check('other currencies do not make the summary taller', (await page(`Math.round($('.metrics').getBoundingClientRect().height)`)) <= 100);
+  check('report and quantity totals include the imported rows, whatever their currency', mixed[0][0] === '35' && mixed[1][0] === '2,618units' && mixed[1][1] === 'Quantity in 30 of 35 reports', JSON.stringify(mixed));
+  await click(`$$('.metric .icon-btn')[2]`);
+  check('the cost definition says how many costs are left out and that they are not converted', await page(`text('.metric:nth-child(3) .metric-help').includes('3 reports have a cost in another currency or with no currency stated') && text('.metric:nth-child(3) .metric-help').includes('not converted')`), await page(`text('.metric:nth-child(3) .metric-help')`));
+  await click(`$$('.metric .icon-btn')[2]`);
   await click(`byText('.seg button', 'Recorded cost')`);
-  const currencies = await page(`[...$$('.seg')[1].querySelectorAll('button')].map((b) => [b.textContent.trim(), b.getAttribute('aria-pressed')])`);
-  check('the cost ranking offers each currency separately and starts on the one most reports use', JSON.stringify(currencies) === JSON.stringify([['EUR · 2', 'false'], ['USD · 26', 'true'], ['Unspecified · 1', 'false']]), JSON.stringify(currencies));
-  check('the coverage line says what the ranking leaves out', await page(`text('#pareto-coverage').includes('Cost recorded in 29 of 35 reports') && text('#pareto-coverage').includes('6 reports with no cost are not ranked')`), await page(`text('#pareto-coverage')`));
+  await waitFor(`text('#chart-title') === 'Recorded cost (USD) by category'`);
+  check('the cost ranking has no currency selector', await page(`$$('.pareto-controls .seg').length === 1 && !text('.pareto-controls').includes('EUR')`));
+  const usdBars = await page(`$$('.bar-count').map((el) => el.textContent)`);
+  const usdCents = usdBars.reduce((sum, value) => sum + Math.round(Number(value.replace(/[$,]/g, '')) * 100), 0);
+  check('the cost bars are all in dollars and add up to the summary figure, $22,535.25', usdBars.every((value) => value.startsWith('$')) && usdCents === 2253525, JSON.stringify(usdBars));
+  check('the coverage line says what the ranking leaves out', await page(`text('#pareto-coverage').includes('USD cost recorded in 26 of 35 reports') && text('#pareto-coverage').includes('3 reports with a cost in another currency or with no currency stated are not ranked and not converted') && text('#pareto-coverage').includes('6 reports with no cost are not ranked') && text('#pareto-coverage').includes('None of these is treated as zero')`), await page(`text('#pareto-coverage')`));
+  // Each bar against the records behind it, read from storage rather than from the screen.
+  const stored = await (await fetch(base + '/api/ncrs')).json();
+  const byCategory = new Map();
+  for (const r of stored.records) if (r.costCents !== null && r.currency === 'USD') byCategory.set(r.defectCategory ?? 'Uncategorized', (byCategory.get(r.defectCategory ?? 'Uncategorized') ?? 0) + r.costCents);
+  const shownBars = await page(`$$('.bar').map((b) => [b.querySelector('.bar-label').textContent, b.querySelector('.bar-count').textContent])`);
+  check('every cost bar equals the sum of the USD costs on that category\'s stored reports', shownBars.length === byCategory.size && shownBars.every(([name, value]) => Math.round(Number(value.replace(/[$,]/g, '')) * 100) === byCategory.get(name)), JSON.stringify([shownBars, [...byCategory]]));
+  const kept = Object.fromEntries(stored.records.filter((r) => ['EX-NCR-0105', 'EX-NCR-0106', 'EX-NCR-0107'].includes(r.ncrNumber)).map((r) => [r.ncrNumber, [r.costCents, r.currency, r.sourceValues.Cost, r.sourceValues.Currency]]).sort(([a], [b]) => a.localeCompare(b)));
+  check('euro and unstated costs are intact in storage with their original cells', JSON.stringify(kept) === JSON.stringify({ 'EX-NCR-0105': [240000, 'EUR', '2400.00', 'EUR'], 'EX-NCR-0106': [118040, 'EUR', '1180.40', 'EUR'], 'EX-NCR-0107': [21000, null, '210.00', ''] }), JSON.stringify(kept));
+  check('the stored totals still hold every currency separately', JSON.stringify(stored.totals.cost.groups) === JSON.stringify([{ currency: 'EUR', sumCents: 358040, recorded: 2 }, { currency: 'USD', sumCents: 2253525, recorded: 26 }, { currency: null, sumCents: 21000, recorded: 1 }]), JSON.stringify(stored.totals.cost.groups));
+  await type('.search input', 'EX-NCR-0105');
+  await waitFor(`${rowCount} === 1`);
+  check('a euro cost is still shown in euros in the records list, and a search holding only euros ranks nothing', await page(`text('.records tbody td.col-cost').includes('€2,400.00') && text('.pareto-empty').includes('No USD costs recorded.') && text('#pareto-coverage').includes('1 report with a cost in another currency or with no currency stated is not ranked and not converted')`), await page(`text('.records tbody td.col-cost') + ' | ' + text('#pareto-coverage')`));
+  await click(`$('.records tbody .row-open')`);
+  await waitFor(`$('.detail') !== null`);
+  check('the detail panel still shows the euro cost with its currency', await page(`text('.detail').includes('€2,400.00') && text('.detail').includes('EUR')`));
+  await press('Escape');
+  await waitFor(`$('.detail') === null`);
+  await click(`byText('.toolbar .btn', 'Clear filters')`);
+  await inBothThemes('mixed-currencies');
   await click(`byText('.seg button', 'NCR reports')`);
 
   // --- Importing the same file again ---
@@ -700,10 +805,11 @@ async function run() {
   check('the kilogram ranking holds only the 2.5 kg report', JSON.stringify(await page(barValues)) === JSON.stringify([['Material', '2.5', '100.0%']]), JSON.stringify(await page(barValues)));
 
   await click(`byText('.seg button', 'Recorded cost')`);
-  await waitFor(`text('#chart-title') === 'Recorded cost by category'`);
+  await waitFor(`text('#chart-title') === 'Recorded cost (USD) by category'`);
   check('by recorded cost in USD: Material $850, Labeling $100, Dimensional $50',
     JSON.stringify(await page(barValues)) === JSON.stringify([['Material', '$850.00', '85.0%'], ['Labeling', '$100.00', '95.0%'], ['Dimensional', '$50.00', '100.0%']]), JSON.stringify(await page(barValues)));
-  check('coverage for cost: 8 of 10 recorded, 2 not ranked, euros ranked separately', await page(`text('#pareto-coverage').includes('Cost recorded in 8 of 10 reports') && text('#pareto-coverage').includes('2 reports with no cost are not ranked') && text('#pareto-coverage').includes('ranked separately')`), await page(`text('#pareto-coverage')`));
+  check('coverage for cost: USD in 7 of 10, the euro report left out and not converted, 2 with no cost', await page(`text('#pareto-coverage').includes('USD cost recorded in 7 of 10 reports') && text('#pareto-coverage').includes('1 report with a cost in another currency or with no currency stated is not ranked and not converted') && text('#pareto-coverage').includes('2 reports with no cost are not ranked')`), await page(`text('#pareto-coverage')`));
+  check('the summary agrees with the ranking: $1,000.00 in 7 of 10 reports', await page(`$$('.metric')[2].querySelector('.metric-value').textContent.trim() === '$1,000.00' && $$('.metric')[2].querySelector('.metric-coverage').textContent === 'USD cost recorded in 7 of 10 reports'`), await page(`text('.metrics')`));
   await click(`byText('.bar', 'Labeling')`);
   await waitFor(`${rowCount} === 4`);
   check('selecting Labeling lists its 4 reports and says 3 contribute a cost', (await page(countText)) === '4 of 10 reports' && await page(`text('.pareto-readout').includes('3 reports contribute') && text('.pareto-readout').includes('1 more in this category has no recorded cost in USD')`), await page(`text('.pareto-readout')`));
@@ -716,7 +822,7 @@ async function run() {
   const exported = join(downloads, 'valynce-pareto-cost-usd.csv');
   await until(() => existsSync(exported), 'the exported file');
   const csv = readFileSync(exported, 'utf8').trimEnd().split('\r\n');
-  check('the exported file matches the chart row for row', csv.length === 4 && csv[1] === '1,Material,850.00,USD,85.00,85.00,1,Recorded cost,10,8' && csv[2] === '2,Labeling,100.00,USD,10.00,95.00,3,Recorded cost,10,8' && csv[3] === '3,Dimensional,50.00,USD,5.00,100.00,3,Recorded cost,10,8', csv.join(' | '));
+  check('the exported file matches the chart row for row', csv.length === 4 && csv[1] === '1,Material,850.00,USD,85.00,85.00,1,Recorded cost,10,7,1' && csv[2] === '2,Labeling,100.00,USD,10.00,95.00,3,Recorded cost,10,7,1' && csv[3] === '3,Dimensional,50.00,USD,5.00,100.00,3,Recorded cost,10,7,1', csv.join(' | '));
   await click(`byText('.toolbar .btn', 'Clear filters')`);
   await choose('.toolbar select', 'Open');
   await waitFor(`${rowCount} === 4`);

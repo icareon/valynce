@@ -71,15 +71,16 @@ These terms keep their shop-floor meaning. Do not rename, merge or reinterpret t
 - `reportedCause` is what the report says. Do not present it, or anything a model produces, as a verified root cause.
 - Cost is stored as whole hundredths (`costCents`) so sums are exact, with an ISO 4217 `currency` beside it.
 - A cost whose currency was not stated has `currency` null and is shown as "Currency unspecified". Never assign a currency to it, and never infer one from a symbol such as `$`.
-- Never add amounts in different currencies, or stated and unstated ones, together. Show one total per currency. Valynce does not convert.
+- Never add amounts in different currencies, or stated and unstated ones, together. Valynce does not convert.
+- For now the summary and the cost ranking show costs stated in USD only (`REPORTING_CURRENCY` in `src/modules/quality/totals.ts`), labelled "Recorded cost (USD)". A cost in another currency, or with none stated, stays in storage, the records list, the detail panel and the source cells exactly as recorded. It is counted beside the figure as left out; it is never converted, relabelled as USD or treated as zero. With no USD cost at all, say "No USD costs recorded." rather than showing $0.00.
 - Affected quantity is stored in whole thousandths with its unit. A quantity with no unit is a count of pieces and must be whole. A fraction is accepted only with a recognised unit of measure.
-- Never add quantities in different units together. Show one total, and one Pareto ranking, per unit.
+- Never add quantities in different units together. Show one total, and one Pareto ranking, per unit. NCR count and quantity always use the whole population; only cost is limited to USD.
 - Categories, statuses and other values are compared exactly as written. Do not merge, rename or normalise them. The only exceptions are units: spellings of "pieces" all mean a count, and known units of measure are stored under one symbol.
 
 ## Pareto rules
 
 - A ranking is computed in `src/modules/quality/pareto.ts` from one population and one metric. The chart, the readout, the table of contributing records and the exported file must all come from that same result.
-- Every report in the population is either in exactly one ranking or counted as missing for the metric. State the coverage beside the chart. A missing value is never ranked as zero.
+- Every report in the population is in exactly one ranking, counted as missing for the metric, or, for cost, counted as excluded because its cost is not in USD. State all three beside the chart and in the export. A missing or excluded value is never ranked as zero.
 - When the total is zero, say so and show no shares. When nothing has a value, or no report matches, say that instead of drawing an empty chart.
 - Rank the uncategorized bucket by its size like any other, and draw it differently so it reads as "unknown".
 - Never call the leading category a cause, a driver or a root cause. A ranking shows where reports, quantity or cost are recorded, not why.
@@ -88,7 +89,7 @@ These terms keep their shop-floor meaning. Do not rename, merge or reinterpret t
 
 - Reading a file never guesses. A date that could be read two ways blocks the import until the user chooses the format; an amount is read exactly or the row is rejected; nothing is rounded.
 - The same holds for numbers. A format is taken from the file only when a value proves it ("1,234.56" or "12,5"). A value such as "1,234" proves nothing, so the user must choose, and the preview shows how each number will be read before anything is stored.
-- A currency comes from the file's currency column or from the setting the user chose for that import. It is never taken from a symbol or assumed.
+- A currency comes from the file's currency column or from the setting the user chose for that import. It is never taken from a symbol or assumed. When the file has no currency column, the only offer is an unticked box, "All costs in this file are USD"; the preview states how many costs it will label before anything is stored, and the choice is dropped if the cost or currency column changes.
 - Every row gets a stated outcome: imported, error (with every reason), repeated in the file, already stored, or blank. Rows are numbered as a spreadsheet shows them, with the header as row 1.
 - Stored records are never overwritten. A row whose NCR ID already exists, or appeared earlier in the file, is skipped and reported with the fields that differ.
 - An import is stored completely or not at all, together with an entry recording the file name, its SHA-256, the time, the mapping used and the row counts.
@@ -135,7 +136,7 @@ Run `npm run typecheck` and `npm test` before calling a change done. For a chang
 - Sans-serif for descriptions and table content; monospace for navigation, column and chart labels, record IDs and technical values. Numbers that line up use tabular figures.
 - Surfaces are flat: thin borders, small radii, no gradients or decorative patterns.
 - The browser document is the only vertical scroll container. Do not give the shell, the content area or a table a fixed height or its own vertical overflow; the app bar and navigation rail are sticky, and the table header sticks under the app bar. The one exception is the detail panel, which is fixed and scrolls inside itself. `npm run check:browser` checks this with real wheel events.
-- The summary row is compact: content decides its height, with no minimum heights or stretching, and longer explanations sit behind the help buttons.
+- The summary is three borderless groups straight on the page (NCR reports, affected quantity with its unit, recorded cost in USD): thin vertical rules between them, one rule underneath, no panel or rounded box. Content decides its height, about 90px on a desktop, with no minimum heights or stretching; each group has a small label, one prominent value and one coverage line, and longer explanations sit behind the help buttons. It stacks on narrow screens.
 - Every control works by keyboard and shows visible focus. Status is never carried by colour alone.
 - Show only controls that work. Do not add placeholders for features that are not built.
 - Do not show trends, percentage changes, scores or findings that are not computed from the stored records.

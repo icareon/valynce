@@ -3,6 +3,7 @@ import { filterRecords, NO_FILTER } from '../modules/quality/filter.ts';
 import type { RecordFilter } from '../modules/quality/filter.ts';
 import { computePareto } from '../modules/quality/pareto.ts';
 import type { ParetoMetric } from '../modules/quality/pareto.ts';
+import { REPORTING_CURRENCY } from '../modules/quality/totals.ts';
 import type { NcrListResponse } from '../server/contract.ts';
 import { listNcrs, loadSample, removeSample } from './api.ts';
 import { Icon } from './bits.tsx';
@@ -83,7 +84,7 @@ export function App() {
   const [filter, setFilter] = useState<RecordFilter>(NO_FILTER);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [metric, setMetric] = useState<ParetoMetric>('count');
-  // The currency or unit chosen for each metric, when it has more than one.
+  // The quantity unit chosen for ranking, when there is more than one.
   const [seriesUnits, setSeriesUnits] = useState<Partial<Record<ParetoMetric, string | null>>>({});
   const opener = useRef<HTMLElement | null>(null);
 
@@ -116,16 +117,17 @@ export function App() {
   // One population for the chart, its export and the table: the reports that
   // search and status allow. Selecting a category then narrows only the table.
   const population = useMemo(() => filterRecords(records, { ...filter, category: undefined }), [records, filter]);
-  const pareto = useMemo(() => computePareto(population, metric), [population, metric]);
+  // Cost is ranked in one currency only; other costs are counted as excluded, not converted.
+  const pareto = useMemo(() => computePareto(population, metric, { costCurrency: REPORTING_CURRENCY }), [population, metric]);
   const categoryCounts = useMemo(() => {
     const counts = new Map<string | null, number>();
     for (const r of population) counts.set(r.defectCategory, (counts.get(r.defectCategory) ?? 0) + 1);
     return counts;
   }, [population]);
-  // Which currency or unit to rank when there are several: the one most stored
+  // Which unit to rank when there are several: the one most stored
   // reports use, so that applying a filter does not switch it unasked.
   const usualUnit = useMemo(
-    () => [...computePareto(records, metric).series].sort((a, b) => b.recorded - a.recorded)[0]?.unit,
+    () => [...computePareto(records, metric, { costCurrency: REPORTING_CURRENCY }).series].sort((a, b) => b.recorded - a.recorded)[0]?.unit,
     [records, metric],
   );
   const selected = records.find((r) => r.id === selectedId) ?? null;
