@@ -22,13 +22,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/icareon/valynce/releases/download/v0.1.0-alpha.4/valynce-pareto-demo.mp4">
+  <a href="https://github.com/icareon/valynce/releases/download/v0.1.0-alpha.5/valynce-pareto-demo.mp4">
     <img src="docs/screenshots/overview-light.png" alt="Valynce overview: totals and a Pareto chart of NCR reports by defect category, shown with synthetic demo data" width="900">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/icareon/valynce/releases/download/v0.1.0-alpha.4/valynce-pareto-demo.mp4"><strong>Watch the 20-second demo</strong></a>:
+  <a href="https://github.com/icareon/valynce/releases/download/v0.1.0-alpha.5/valynce-pareto-demo.mp4"><strong>Watch the 20-second demo</strong></a>:
   the same ten reports ranked three ways, with a different category on top each time.<br />
   <sub>Every screenshot and the demo use synthetic data that ships with the project.</sub>
 </p>
@@ -54,7 +54,7 @@ A new installation starts empty. From there:
 - **Load demo data** adds 24 synthetic reports, clearly tagged, which you can remove again with one click.
 - **Import** takes a CSV file. To see the Pareto analysis at its clearest, import [`fixtures/pareto-check.csv`](fixtures/pareto-check.csv), then switch the metric on the Overview. Labeling leads by report count, Dimensional by affected quantity and Material by recorded cost.
 
-To run exactly the tagged alpha, check it out before installing: `git checkout v0.1.0-alpha.4`.
+To run exactly the tagged alpha, check it out before installing: `git checkout v0.1.0-alpha.5`.
 
 Valynce is not published to npm yet, so there is no `npx` command.
 
@@ -116,7 +116,7 @@ Three rules hold everywhere:
 
 ## Alpha limitations
 
-This is an early alpha, `v0.1.0-alpha.4`. Expect rough edges.
+This is an early alpha, `v0.1.0-alpha.5`. Expect rough edges.
 
 - **Checked on one platform.** Development and automated checks ran on macOS with Chrome. Windows, Linux desktops, Safari, Firefox and screen readers have not been checked by hand. CI runs installation, type checking, tests and the build on Linux.
 - **CSV only, UTF-8 only.** Files need a header row and comma, semicolon or tab separators, up to 20 MB. Excel workbooks are not read.

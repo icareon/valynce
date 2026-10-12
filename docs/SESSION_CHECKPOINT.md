@@ -8,11 +8,14 @@
 
 | | |
 |---|---|
-| Completed | Increments 1, 2 and 3 of the Week 1 plan |
-| Product tag | `v0.1.0-alpha.4` (commit `abc7d75`), the completed Increment 3 |
-| After the tag | Documentation and repository setup only: README, license holder, notices, contributing guide, issue templates, CI and this file. No product code changed. |
+| Completed | Increments 1, 2 and 3 of the Week 1 plan, plus one layout fix |
+| Product tag | `v0.1.0-alpha.5` (commit `1957069`): Increment 3 with the scrolling fix and compact summary row |
+| Earlier tags | `v0.1.0-alpha.4` is Increment 3 as first completed. `alpha.1` to `alpha.3` are the earlier increments. None were moved for the fix. |
+| After the tag | Documentation only: README links and this file. |
 | Repository | https://github.com/icareon/valynce |
 | Next planned | Increment 4: an optional, evidence-linked AI summary that cites the report IDs it is based on |
+
+One thing to know about the history: on October 11, 2026 every commit message was rewritten once to remove a co-author line, and `main` and tags `alpha.1` to `alpha.4` were pushed again with new commit IDs. File contents at each tag did not change. Commits must not carry AI co-author lines.
 
 ## What is implemented
 
@@ -40,12 +43,18 @@
 - Number format on import is taken from the file only when a value proves it, otherwise chosen by the user, with a preview of each reading.
 - Light (default) and dark themes with a persistent toggle.
 
+**Layout fix** (`v0.1.0-alpha.5`)
+- Cause of the blank area when scrolling: the content pane was its own scroll container, but the screen-reader-only labels inside it are positioned against the document. They stayed at their unscrolled positions and made the document about 860px taller than the window, so the document scrolled as well and carried the whole app off the top.
+- The document is now the only vertical scroll container. The app bar and navigation rail are sticky, the table grows with its rows, and its header sticks under the app bar. The detail panel is fixed and scrolls inside itself.
+- The three summary tiles are one compact row, about 120px tall with the demo data, growing only when there are several currencies or units.
+
 ## Verification actually completed
 
-All of this ran on macOS with Node 24.21.0, against commit `abc7d75`, from a clean clone:
+All of this ran on macOS with Node 24.21.0, against commit `1957069`, from a clean clone:
 
 - `npm ci`, `npm run typecheck`, `npm test` (65 tests) and `npm run build` passed.
-- `npm run check:browser` passed all 131 checks in headless Chrome. They cover loading and removing demo data, filters, the detail panel by keyboard, a full CSV import, re-import, removal of an import, the number-format choice, all three Pareto metrics against `fixtures/pareto-check.csv`, the CSV export, both themes, toggle persistence, text contrast, keyboard focus, reduced motion, layout at 1440x900 and 1280x800, and persistence across server restarts.
+- `npm run check:browser` passed all 166 checks in headless Chrome. They cover loading and removing demo data, filters, the detail panel by keyboard, a full CSV import, re-import, removal of an import, the number-format choice, all three Pareto metrics against `fixtures/pareto-check.csv`, the CSV export, both themes, toggle persistence, text contrast, keyboard focus, reduced motion, layout at 1440x900, 1280x800 and 390x800, and persistence across server restarts.
+- Scrolling was checked with real wheel events over the chart, table, sidebar and page background, on the Overview, Records and Import views, with a short filtered table, a one-row table and the detail panel open. In each case only the document scrolls, it is exactly as tall as its content, and the app bar and rail stay in place. The original fault was reproduced and measured before the fix.
 - Figures for `fixtures/pareto-check.csv` were worked out by hand and match the tests and the app.
 - Screenshots in both themes were inspected by the coding agent, not by a person.
 - The demo video was recorded and its duration (20 s), size (1280x720) and final frame were checked.
