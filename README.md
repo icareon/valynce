@@ -50,7 +50,7 @@ Early alpha.
 
 - Developed and checked on macOS with Chrome. Installation, type checking, tests and the build also run on Linux in CI. Windows, Safari and Firefox have not been checked.
 - Reads CSV files only: UTF-8, with a header row.
-- The AI summary's checks ran against scripted replies. It has not yet been run against the live model; see the reference for how to run that check yourself.
+- The AI summary was checked against the live model on nine synthetic reports only. Its checks catch a figure or a citation attached to the wrong report, not a sentence that misreads a report; see the reference for the result and the limits.
 
 ## Contributing and license
 

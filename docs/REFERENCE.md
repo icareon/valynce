@@ -57,16 +57,25 @@ Optional. Without a key the feature explains how to turn it on and everything el
 **What is checked in every reply.**
 
 - Shape: an overview, at most three findings, at most five missing-information notes, at most three suggested checks, each within a length limit.
-- Citations: every finding cites at least one report ID, and every ID must be one that was sent.
-- Figures: any number in the text must already appear in the evidence. The figures shown under "Analysis scope and figures" are written by Valynce from the ranking, not by the model.
+- Citations: every finding cites at least one report ID, and every ID must be one that was sent. A finding must also cite every report its text names, at least one report in a category it names, and, when it speaks of a reported cause, a report that has one.
+- Figures: a number must be the evidence's figure for the report or category its sentence is about, or for the analysis as a whole. A real figure attached to the wrong report or category is rejected, and a share is not accepted as a count or an amount. The figures shown under "Analysis scope and figures" are written by Valynce from the ranking, not by the model.
 - Wording: no stated or implied root cause, no causal claim outside a finding marked as a hypothesis, no savings estimates, no defect rates.
 - Descriptions are treated as data. An instruction written inside a report is not followed, and a reply that acts on one fails the checks above.
 
 **Outdated summaries.** A summary belongs to the exact evidence it was generated from. If the reports, the search, the status filter, the selected category or the metric change, it is marked "Outdated" and left as it was. It is regenerated only when you ask.
 
-**What these checks cannot do.** They test wording and traceability, not truth. A sentence can cite real reports and still misread them, and numbers written as words are not checked. Treat every summary as a draft and open the cited reports.
+**What these checks cannot do.** They test wording and traceability, not truth. Treat every summary as a draft and open the cited reports.
 
-**Trying it with synthetic data.** Import [`fixtures/ai-eval.csv`](../fixtures/ai-eval.csv): nine invented reports with missing costs, a euro cost, a quantity in kg, and one description that tells the model to break the rules. `npm run check:ai:live` sends that same file to the provider from a throwaway database and reports whether real replies pass every check.
+- A sentence can cite the right reports and still misread them: a wrong status, a wrong disposition or a wrong comparison is not detected.
+- Numbers written as words ("four reports") are not checked. In live runs the model wrote small counts this way, including some it had added up itself.
+- When a sentence names two reports or two categories, a figure belonging to either is accepted for both.
+- Counts for the whole analysis, such as how many reports have no cost, are accepted in any sentence, so the model can attach one to the wrong group of reports.
+- A category is recognised by its exact name, so a category called "Other" or "Material" can be matched by the same word used in its ordinary sense.
+- The checks can also refuse a harmless sentence, most often one that mentions a root cause or savings only to say that a report's text asked for them. The one correction usually resolves it; if not, the request fails and nothing is saved.
+
+**Live result.** On October 12, 2026 `npm run check:ai:live` was run six times against `claude-sonnet-5-5` with the synthetic file, 24 requests in all. None of the 28 replies followed the instructions written inside the report, cited a report that was not sent, or stated a root cause, savings or a defect rate. The first run failed one request of four because the checks refused accurate sentences; those checks were corrected, and the final run passed four of four on the first reply. This is a small sample on nine invented reports, not a measurement of accuracy on your data.
+
+**Trying it with synthetic data.** Import [`fixtures/ai-eval.csv`](../fixtures/ai-eval.csv): nine invented reports with missing costs, a euro cost, a quantity in kg, and one description that tells the model to break the rules. `npm run check:ai:live` sends that same file to the provider from a throwaway database, prints every reply in full, including a first reply that was rejected and why, and reports whether real replies pass every check.
 
 ## What the numbers mean
 
@@ -96,7 +105,7 @@ This is an early alpha. Expect rough edges.
 - **One grouping.** The Pareto chart groups by defect category only.
 - **Cost analysis in USD only.** The cost total and cost ranking cover costs stated in US dollars. Other currencies are stored and listed, and counted as left out, but not totalled or ranked yet.
 - **Built-in SQLite.** Storage uses Node's `node:sqlite` module, which Node labels a release candidate.
-- **AI summary is a draft.** It is optional, limited to 200 reports per request, uses one provider, and keeps only the most recent summary. Its checks were exercised with scripted replies; a live run against the real model has not been done yet. The wording checks are in English.
+- **AI summary is a draft.** It is optional, limited to 200 reports per request, uses one provider, and keeps only the most recent summary. Its checks were exercised with scripted replies and with a small live run on synthetic reports (see [AI summary](#ai-summary)); it has not been evaluated on real records. The wording checks are in English.
 
 ## Roadmap
 

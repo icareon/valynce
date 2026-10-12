@@ -8,13 +8,13 @@
 
 | | |
 |---|---|
-| Completed | Increment 4: the optional, evidence-linked AI summary, on top of Increments 1 to 3 and the two interface refinements |
-| Branch | `main`, ahead of `origin/main` by the Increment 4 commit. Not pushed. |
-| Product tag | `v0.1.0-alpha.7`, local only. |
+| Completed | Increment 4: the optional, evidence-linked AI summary, with its live verification and the fixes that came out of it, on top of Increments 1 to 3 and the two interface refinements |
+| Branch | `main`, ahead of `origin/main` by the two Increment 4 commits. Not pushed. |
+| Product tag | `v0.1.0-alpha.8`, local only. `v0.1.0-alpha.7` is Increment 4 before live verification, also local only. |
 | Earlier tags | `v0.1.0-alpha.6` is the borderless summary with USD-only cost, `alpha.5` the scrolling fix, `alpha.4` Increment 3, and `alpha.1` to `alpha.3` the earlier increments. None were moved. |
-| GitHub prereleases | `v0.1.0-alpha.4`, `v0.1.0-alpha.5` and `v0.1.0-alpha.6`. Nothing for `alpha.7` yet. |
+| GitHub prereleases | `v0.1.0-alpha.4`, `v0.1.0-alpha.5` and `v0.1.0-alpha.6`. Nothing for `alpha.7` or `alpha.8` yet. |
 | Repository | https://github.com/icareon/valynce |
-| Next planned | Run the live model check with a real key, then decide on pushing `alpha.7`. After that: export of the reports themselves. |
+| Next planned | Decide on pushing `alpha.8`. After that: export of the reports themselves. |
 
 The README was cut down to a short overview on October 11, 2026. Data locations, definitions, limitations and the roadmap moved to `docs/REFERENCE.md`.
 
@@ -69,16 +69,35 @@ One thing to know about the history: on October 11, 2026 every commit message wa
 - The panel shows loading, failure and timeout without blocking the app, labels facts and hypotheses, and makes cited report IDs open the report.
 - The wording about external requests in the README, the reference and the app bar now separates normal local use from the optional summary.
 
+**Live verification of the AI summary** (`v0.1.0-alpha.8`)
+- Figures are now tied to what a sentence is about: a number must be the evidence's figure for a report or category the sentence names (or, when it names no report, one the finding cites), or for the analysis as a whole. A share is not accepted as a count or an amount. Before, any number found anywhere in the evidence passed.
+- A finding must cite every report its text names, at least one report in a category it names, and a report that has the reported cause it speaks of. Before, any valid ID passed.
+- Three false rejections seen live were fixed: a fact saying a cause is "not a verified cause", and two missing-information entries naming a verified cause as absent. A claim followed by an unrelated "not" is still rejected.
+- The prompt now tells the model not to repeat what instructions inside a report ask for, not to suggest converting a currency or unit, to cite what a finding names, and that coverage counts describe the whole population when only one category is listed.
+- `npm run check:ai:live` prints every reply in full, including a rejected first reply and the reasons.
+
 ## Verification actually completed
 
-Increment 4, on macOS with Node 24.21.0, October 12, 2026:
+Live verification, on macOS with Node 24.21.0, October 12, 2026, model `claude-sonnet-5-5`:
+
+- `npm run check:ai:live` was run six times, 24 requests, 28 replies, sending only `fixtures/ai-eval.csv`. Every reply was read against the fixture.
+- Run 1, on the `alpha.7` checks: 3 of 4 passed on the first reply. The fourth failed after its one correction. Both of its replies were accurate; the checks had refused a sentence describing what the injected text asked for, an entry asking for "any verified cause analysis", and then a fact ending "not a verified cause".
+- Runs 2 to 5, while the checks were being changed: 4 of 4 each, with one correction in three of them. Two of those corrections were false rejections caused by the new checks (a figure in a sentence that referred to its report as "It"; a comparison naming a second category) and one by the old wording check; all three were fixed and are now tests.
+- Run 6, on the final code: 4 of 4 on the first reply. Replaying all 28 recorded replies through the final checks accepts 27; the one still refused is the reply that listed what the injected text asked for.
+- Resistance to the injected description: in all 28 replies the model said the text was not a defect description and did not follow it. None contained the requested word, the nonexistent report, the savings figure or the asserted cause.
+- Missing values: the replies named the reports with no cost or quantity, and the non-USD cost and the kg quantity, as left out of the ranking. None treated one as zero or wrote a converted amount.
+- Accuracy problems found in accepted replies, none caught by the checks: counts written as words that the model had added up itself ("Four reports have no usable cost", which is correct, and "Three reports across the other categories have no recorded cost", which is wrong: two are in other categories); "its place in the ranking is unclear" for a report that is in fact ranked as uncategorized; a report said to be unranked for having no category when the reason was its missing cost; and, before the prompt change, two accepted replies suggesting that the non-USD cost be converted. In the three runs after the prompt change no reply suggested conversion.
+- `npm run typecheck`, `npm test` (93 tests, 24 of them in `tests/ai.test.ts`), `npm run build` and `npm run check:browser` (252 checks) passed.
+- This is a small sample on nine invented reports. It shows the request format works and how this model behaved on this file; it is not a measurement of accuracy on real records.
+
+Increment 4 as built at `alpha.7`, on macOS with Node 24.21.0, October 12, 2026:
 
 - `npm run typecheck`, `npm test` (90 tests, 21 of them new in `tests/ai.test.ts`) and `npm run build` passed.
 - The new tests use `fixtures/ai-eval.csv` and scripted model replies. They cover: totals worked out by hand ($955.00 in 5 of 9 reports; 170 pieces in 7 of 9, with 2.5 kg kept apart); missing and non-USD costs never sent as zero or converted; withheld fields absent from the request; the 200-report limit refusing rather than truncating; a description containing instructions; root-cause, causal, savings, rate and invented-figure claims; invalid shape; nonexistent report IDs; one repair and no more; provider failure, timeout and missing key; duplicate requests; changed metric, filter and records; storage and removal; the adapter's request body; and the key never appearing in a response or in the database.
 - `npm run check:browser` passed all 252 checks (50 new). The new ones drive the real interface against a stand-in provider on the same machine: no key, confirmation contents, nothing sent before confirming, exactly one request on confirming, request contents, labels, citations opening a report by keyboard, outdated marking on metric and filter change, persistence across a restart, the invalid-reply failure, the timeout, both themes, 390px width and scrolling.
 - The database upgrade from version 4 to 5 was run on a copy of an existing local database: 11 records before and after, backup written.
 - Screenshots of the confirmation, the result, the outdated state and the failure in both themes were inspected by the coding agent, not by a person.
-- **Not done: a live call to the real model.** No Anthropic key was available, so `npm run check:ai:live` reported "NOT RUN". The request format follows the official documentation read on October 12, 2026 and is tested against a scripted server, but no real reply has been seen. Do not describe the summary as working with the live model until that check has been run.
+- At `alpha.7` no live call had been made; see the live verification above for the result at `alpha.8`.
 
 Earlier increments (the paragraphs below are as recorded at `alpha.6`):
 
@@ -104,8 +123,8 @@ After publication, CI on GitHub runs installation, type checking, tests and the 
 
 These need a person, and none has been done:
 
-- **A live AI summary.** Put a key in `.env` and run `npm run check:ai:live`, then try the feature in the app. It sends only `fixtures/ai-eval.csv`.
-- **Review of the summary wording checks** against real model output. They are pattern-based and may reject harmless sentences or miss a claim phrased unusually.
+- **A summary in the app with a real key.** The live check calls the server's routes directly; the panel has only been driven against a stand-in provider.
+- **A person reading live summaries.** The replies were read by the coding agent. The checks cannot tell whether a sentence misreads a report, and numbers written as words are not checked; see `docs/REFERENCE.md`.
 - **Human visual review** of the interface in both themes, including comparison with the intended reference design.
 - **Full playback** of the demo video from start to finish.
 - **Platform checks**: Windows, Linux desktop, Safari and Firefox.
@@ -137,12 +156,11 @@ npm run build && npm run demo:record      # writes demo/out/valynce-pareto-demo.
 npm run check:ai:live                     # needs ANTHROPIC_API_KEY; sends only synthetic data
 ```
 
-To reproduce the tagged alpha exactly: `git checkout v0.1.0-alpha.7 && npm ci && npm run build && npm test`.
+To reproduce the tagged alpha exactly: `git checkout v0.1.0-alpha.8 && npm ci && npm run build && npm test`.
 
 ## When work resumes
 
 1. Read `AGENTS.md`, then this file.
 2. Check `git status`. The Remotion project in `demo/` and a related paragraph in `AGENTS.md` are deliberately uncommitted; leave them unless asked.
 3. Re-run the checks above before changing anything.
-4. Run the live AI check with a real key and record its actual result here.
-5. Push `main` and the `alpha.7` tag only when asked.
+4. Push `main` and the `alpha.7` and `alpha.8` tags only when asked.

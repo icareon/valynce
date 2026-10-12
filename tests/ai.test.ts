@@ -185,7 +185,7 @@ test('replies that break a rule are rejected with the reason', async () => {
   rejects((s) => ((s.findings[0]!.statement = 'The cost is caused by a wrong alloy delivery.'), s), /causal claim/);
   rejects((s) => ((s.overview = 'Material is the main driver of cost.'), s), /causal claim/);
   // Invented figures, savings and rates.
-  rejects((s) => ((s.overview = 'Material accounts for 92% of cost.'), s), /not found in the evidence \(92\)/);
+  rejects((s) => ((s.overview = 'Material accounts for 92% of cost.'), s), /a figure \(92\) that the evidence does not give/);
   rejects((s) => ((s.nextSteps = ['Fixing labeling would save about 70.00 a month.']), s), /estimates savings/);
   rejects((s) => ((s.overview = 'The defect rate for labeling is high.'), s), /defect rate/);
   // Invalid shape.
@@ -204,6 +204,95 @@ test('saying what is unknown is allowed: an unverified cause, and a rate that ca
   summary.overview = 'The ranking shows where cost is recorded. It does not establish a root cause.';
   summary.missingInformation = ['No production quantities are given, so a defect rate cannot be calculated.', 'The reported cause on AE-006 is not verified.'];
   assert.ok(validateSummary(summary, bundle, facts).ok, JSON.stringify(validateSummary(summary, bundle, facts)));
+});
+
+test('a figure must belong to the report or category its sentence is about, not merely appear in the evidence', async () => {
+  const { storage } = await setup();
+  const { bundle, facts } = evidence(COST, storage);
+  const check = (change: (summary: AiSummary) => void) => {
+    const summary = structuredClone(GOOD);
+    change(summary);
+    return validateSummary(summary, bundle, facts);
+  };
+  const rejects = (change: (summary: AiSummary) => void, reason: RegExp) => {
+    const result = check(change);
+    assert.ok(!result.ok, `accepted: ${reason}`);
+    assert.ok(result.problems.some((p) => reason.test(p)), `${reason} not in ${JSON.stringify(result.problems)}`);
+  };
+  const accepts = (change: (summary: AiSummary) => void) => {
+    const result = check(change);
+    assert.ok(result.ok, JSON.stringify(result));
+  };
+  // 850.00 is in the evidence, as the cost of AE-006 and of Material. It is not the cost of AE-001 or of Labeling.
+  accepts((s) => (s.findings[0] = { kind: 'fact', statement: 'AE-006 records a cost of 850.00.', recordIds: ['AE-006'] }));
+  rejects((s) => (s.findings[0] = { kind: 'fact', statement: 'AE-001 records a cost of 850.00.', recordIds: ['AE-001'] }), /Finding 1 contains a figure \(850\)/);
+  rejects((s) => (s.findings[0] = { kind: 'fact', statement: 'The cost on this report is 850.00.', recordIds: ['AE-001'] }), /Finding 1 contains a figure \(850\)/);
+  rejects((s) => (s.overview = 'Labeling holds 850.00 of recorded cost.'), /The overview contains a figure \(850\)/);
+  accepts((s) => (s.overview = 'Labeling holds 70.00 of recorded cost, from 2 reports.'));
+  // A sentence that names no report is about the cited one. This one is from a live reply.
+  const quantity = evidence(PIECES, storage);
+  const pronoun = { kind: 'fact' as const, statement: 'The description of AE-008 is not a description of a defect. It still contributes its recorded quantity of 4 units to Material.', recordIds: ['AE-008'] };
+  assert.ok(validateSummary({ ...GOOD, overview: 'Material is first.', findings: [pronoun], missingInformation: [] }, quantity.bundle, quantity.facts).ok);
+  const other = { ...pronoun, statement: 'AE-006 is in Material. AE-008 contributes 80 units to it.', recordIds: ['AE-006', 'AE-008'] };
+  assert.ok(!validateSummary({ ...GOOD, overview: 'Material is first.', findings: [other], missingInformation: [] }, quantity.bundle, quantity.facts).ok);
+  // One report's value is not a figure for the analysis as a whole.
+  rejects((s) => (s.overview = 'The largest single cost is 850.00, and the smallest is 10.00.'), /The overview contains a figure \(10\)/);
+  // A share belongs to its category and is not interchangeable with a count: Material is 89.0% from 1 report.
+  accepts((s) => (s.overview = 'Material holds 89.0% of the recorded cost.'));
+  rejects((s) => (s.overview = 'Labeling holds 89.0% of the recorded cost.'), /The overview contains a figure \(89\)/);
+  rejects((s) => (s.overview = 'Material holds 1% of the recorded cost.'), /The overview contains a figure \(1\)/);
+  rejects((s) => (s.overview = 'Material has 89 reports.'), /The overview contains a figure \(89\)/);
+  // Figures for the whole analysis may stand anywhere: 5 of 9 reports are ranked, the total is 955.00.
+  accepts((s) => (s.overview = 'The ranking covers 5 of 9 reports and a total of 955.00.'));
+});
+
+test('a finding must cite the reports and categories it names, and a report that has the cause it speaks of', async () => {
+  const { storage } = await setup();
+  const { bundle, facts } = evidence(COST, storage);
+  const check = (finding: AiSummary['findings'][number]) => validateSummary({ ...GOOD, findings: [finding] }, bundle, facts);
+  const rejects = (finding: AiSummary['findings'][number], reason: RegExp) => {
+    const result = check(finding);
+    assert.ok(!result.ok, `accepted: ${reason}`);
+    assert.ok(result.problems.some((p) => reason.test(p)), `${reason} not in ${JSON.stringify(result.problems)}`);
+  };
+  // AE-001 is a real report, so the ID alone passes. It is not the report the sentence is about.
+  rejects({ kind: 'fact', statement: 'AE-006 was returned to the supplier.', recordIds: ['AE-001'] }, /names AE-006 in its statement without citing it/);
+  rejects({ kind: 'fact', statement: 'Labeling ranks second by recorded cost.', recordIds: ['AE-006'] }, /is about Labeling but cites no report in that category/);
+  // A comparison may rest on one side's reports. This one is from a live reply.
+  assert.ok(check({ kind: 'fact', statement: 'Labeling has three reports (AE-001, AE-002, AE-003), tied with Material for the highest count.', recordIds: ['AE-001', 'AE-002', 'AE-003'] }).ok);
+  assert.ok(check({ kind: 'fact', statement: 'Labeling ranks second by recorded cost.', recordIds: ['AE-002'] }).ok);
+  // AE-005 states no cause; AE-004 does.
+  rejects({ kind: 'fact', statement: 'The reported cause is a worn drill.', recordIds: ['AE-005'] }, /speaks of a reported cause, but none of the reports it cites has one/);
+  assert.ok(check({ kind: 'fact', statement: 'The reported cause is a worn drill.', recordIds: ['AE-004'] }).ok);
+  assert.ok(check({ kind: 'fact', statement: 'No reported cause is written on this report.', recordIds: ['AE-005'] }).ok);
+});
+
+test('a fact may say that a cause is not verified, and a gap may ask for a verified cause', async () => {
+  const { storage } = await setup();
+  const { bundle, facts } = evidence({ ...COST, category: 'Material' }, storage);
+  // Both sentences come from a live reply that an earlier version rejected.
+  const summary: AiSummary = {
+    ...GOOD,
+    findings: [
+      {
+        kind: 'fact',
+        statement: 'AE-006 (wrong alloy delivered, closed, return to supplier) holds the only recorded Material cost, 850.00 USD. The report gives its reported cause as a stock mix-up at supplier, which is what the report says and not a verified cause.',
+        recordIds: ['AE-006'],
+      },
+    ],
+    missingInformation: ['Any verified cause analysis for the Material reports.', 'A verified cause for any of the reports; reportedCause is only filled in for AE-006.'],
+  };
+  const result = validateSummary(summary, bundle, facts);
+  assert.ok(result.ok, JSON.stringify(result));
+  for (const gap of ['The root cause is operator error.', 'Operator error was the verified cause of the Material reports.']) {
+    const claim = validateSummary({ ...summary, missingInformation: [gap] }, bundle, facts);
+    assert.ok(!claim.ok && claim.problems.some((p) => /states or implies a root cause/.test(p)), gap);
+  }
+  // The denial has to be about the cause. A claim followed by an unrelated "not" is still a claim.
+  for (const statement of ['The root cause is a stock mix-up, not a worn drill.', 'The verified cause is a stock mix-up.', 'Operators did not check the alloy, and the root cause is the supplier.']) {
+    const claim = validateSummary({ ...summary, findings: [{ kind: 'fact', statement, recordIds: ['AE-006'] }] }, bundle, facts);
+    assert.ok(!claim.ok && claim.problems.some((p) => /states or implies a root cause/.test(p)), statement);
+  }
 });
 
 // ---------- the request, end to end with a scripted model ----------
