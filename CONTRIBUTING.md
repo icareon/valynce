@@ -55,7 +55,7 @@ Put code in the folder that owns it: quality rules in `src/modules/quality`, sha
 
 - Keep each pull request to one change, and say what you checked.
 - Pin any new dependency to an exact version, commit the lockfile, and explain why it is needed.
-- New features should be discussed in an issue first. The roadmap in the README is deliberately short.
+- New features should be discussed in an issue first. The roadmap in [docs/REFERENCE.md](docs/REFERENCE.md) is deliberately short.
 
 ## Reporting a problem
 

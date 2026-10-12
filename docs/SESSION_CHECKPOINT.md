@@ -1,6 +1,6 @@
 # Session checkpoint
 
-**Stop point: October 11, 2026.** Product development is paused here.
+**Stop point: October 11, 2026**, on branch `main`. Product development is paused here.
 
 > **Do not resume development until Paul asks for it.** That means no Increment 4, no new features, no npm publication and no announcements. If you are a coding agent reading this at the start of a session, wait for an explicit request before changing product code.
 
@@ -8,12 +8,16 @@
 
 | | |
 |---|---|
-| Completed | Increments 1, 2 and 3 of the Week 1 plan, plus a layout fix and a summary refinement |
-| Product tag | `v0.1.0-alpha.6`: Increment 3 with the borderless summary and USD-only cost display |
+| Completed | Increment 3 of the Week 1 plan, with Increments 1 and 2 before it and two interface refinements after it (scrolling fix, borderless summary with USD-only cost) |
+| Branch | `main`, matching `origin/main` |
+| Product tag | `v0.1.0-alpha.6`, commit `7d1a9e4`. This is the last commit that changed the product. |
+| Final commit | The tip of `main`. Everything after `7d1a9e4` is documentation only: the short README, `docs/REFERENCE.md` and this file. |
 | Earlier tags | `v0.1.0-alpha.5` is the scrolling fix, `v0.1.0-alpha.4` is Increment 3 as first completed, and `alpha.1` to `alpha.3` are the earlier increments. None were moved. |
-| GitHub prereleases | `v0.1.0-alpha.4` and `v0.1.0-alpha.5`, each with the demo video. `alpha.6` is a tag only; the README still links the `alpha.5` video, which shows the earlier summary. |
+| GitHub prereleases | `v0.1.0-alpha.4`, `v0.1.0-alpha.5` and `v0.1.0-alpha.6`. The demo video was removed from `alpha.5` and is not attached to `alpha.6`; the recording script and the local file in `demo/out/` are kept. |
 | Repository | https://github.com/icareon/valynce |
 | Next planned | Increment 4: an optional, evidence-linked AI summary that cites the report IDs it is based on |
+
+The README was cut down to a short overview on October 11, 2026. Data locations, definitions, limitations and the roadmap moved to `docs/REFERENCE.md`.
 
 One thing to know about the history: on October 11, 2026 every commit message was rewritten once to remove a co-author line, and `main` and tags `alpha.1` to `alpha.4` were pushed again with new commit IDs. File contents at each tag did not change. Commits must not carry AI co-author lines.
 
@@ -68,9 +72,11 @@ All of this ran on macOS with Node 24.21.0, against tag `v0.1.0-alpha.6`, from a
 - Scrolling was checked with real wheel events over the chart, table, sidebar and page background, on the Overview, Records and Import views, with a short filtered table, a one-row table and the detail panel open. In each case only the document scrolls, it is exactly as tall as its content, and the app bar and rail stay in place. The original fault was reproduced and measured before the fix.
 - Figures for `fixtures/pareto-check.csv` were worked out by hand and match the tests and the app.
 - Screenshots in both themes were inspected by the coding agent, not by a person.
-- The demo recording script was re-run against `alpha.6` and completes; that recording was not published. The published video is the `alpha.5` one, whose duration (20 s), size (1280x720) and final frame were checked.
+- The demo recording script was re-run against `alpha.6` and completes; that recording was not published. The only video still on GitHub is the one attached to the `alpha.4` prerelease.
 - The database upgrade was tested on a copy of an existing local database.
 - Git history was scanned for credentials, data files and private material before publication. None was found.
+- The README's statement that the app makes no external network requests rests on two things: the browser checks record every request the page makes during the whole run and fail if any goes anywhere but the local server, and the server code makes no outbound calls.
+- The README's commands were run as written from a clean clone, and its screenshot path and links were checked.
 
 After publication, CI on GitHub runs installation, type checking, tests and the build on Linux.
 
