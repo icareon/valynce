@@ -1,22 +1,38 @@
 # Session checkpoint
 
-**Stop point: October 12, 2026**, on branch `main`. Increment 4 is complete locally and has not been pushed.
+**Stop point: October 12, 2026**, on branch `main`. Increment 4 is complete and published to GitHub as the `v0.1.0-alpha.8` prerelease.
 
-> **Do not push, publish to npm or announce until Paul asks for it.** If you are a coding agent reading this at the start of a session, wait for an explicit request before changing product code.
+> **First task next session: deeper AI validation before adding features.** The checks are listed under "First task next session" below. Do not publish to npm or announce on X until Paul asks for it. If you are a coding agent reading this at the start of a session, wait for an explicit request before changing product code.
 
 ## Where things stand
 
 | | |
 |---|---|
 | Completed | Increment 4: the optional, evidence-linked AI summary, with its live verification and the fixes that came out of it, on top of Increments 1 to 3 and the two interface refinements |
-| Branch | `main`, ahead of `origin/main` by the two Increment 4 commits. Not pushed. |
-| Product tag | `v0.1.0-alpha.8`, local only. `v0.1.0-alpha.7` is Increment 4 before live verification, also local only. |
+| Branch | `main`, pushed to GitHub on October 12, 2026 with the two Increment 4 commits and a documentation commit that refreshed the README. |
+| Product tag | `v0.1.0-alpha.8`, pushed. `v0.1.0-alpha.7` is Increment 4 before live verification; its tag exists locally only and was not pushed, though its commit is in `main`. |
 | Earlier tags | `v0.1.0-alpha.6` is the borderless summary with USD-only cost, `alpha.5` the scrolling fix, `alpha.4` Increment 3, and `alpha.1` to `alpha.3` the earlier increments. None were moved. |
-| GitHub prereleases | `v0.1.0-alpha.4`, `v0.1.0-alpha.5` and `v0.1.0-alpha.6`. Nothing for `alpha.7` or `alpha.8` yet. |
+| GitHub prereleases | `v0.1.0-alpha.4`, `v0.1.0-alpha.5`, `v0.1.0-alpha.6` and `v0.1.0-alpha.8`. None for `alpha.7`. |
 | Repository | https://github.com/icareon/valynce |
-| Next planned | Decide on pushing `alpha.8`. After that: export of the reports themselves. |
+| Next planned | Deeper AI validation, first and before any feature. After that: export of the reports themselves. The roadmap is in `docs/REFERENCE.md`. |
 
-The README was cut down to a short overview on October 11, 2026. Data locations, definitions, limitations and the roadmap moved to `docs/REFERENCE.md`.
+The README was cut down to a short overview on October 11, 2026, and refreshed on October 12, 2026 with one light and dark comparison (`docs/screenshots/overview-light-dark.png`), a workflow and the AI wording. Data locations, definitions, limitations and the roadmap are in `docs/REFERENCE.md`.
+
+## First task next session
+
+Deeper AI validation before adding features. None of this has been done yet:
+
+- Review live summaries through the actual browser panel, and click the citations.
+- Use a larger, more varied synthetic evaluation set.
+- Check numbers written as words.
+- Check that figures attach to the correct report or category when several entities appear in one sentence.
+- Check the scope of whole-analysis counts and of selected-category counts.
+- Check wrong statuses, comparisons, ranking and exclusion explanations.
+- Check ambiguous category names such as "Other".
+- Record both unsupported claims that pass and accurate claims that are rejected.
+- Repeat the live checks against the final code, and report the sample size and the actual outcomes.
+
+The starting point is the live result and the known gaps recorded below and in `docs/REFERENCE.md`. `npm run check:ai:live` prints every reply, including rejected ones.
 
 One thing to know about the history: on October 11, 2026 every commit message was rewritten once to remove a co-author line, and `main` and tags `alpha.1` to `alpha.4` were pushed again with new commit IDs. File contents at each tag did not change. Commits must not carry AI co-author lines.
 
@@ -78,6 +94,12 @@ One thing to know about the history: on October 11, 2026 every commit message wa
 
 ## Verification actually completed
 
+README refresh, October 12, 2026:
+
+- The comparison image was captured from the built `alpha.8` app in headless Chrome on a throwaway database holding only the 24 synthetic demo reports, ranked by recorded cost, at 1100x1000 in each theme.
+- The summary in it is real. "Generate summary" and "Send and generate" were pressed in the page with the configured key, twice in all (the first capture was discarded for its size), sending only the demo reports. Both requests returned a summary that passed the checks, and the coding agent compared both with the demo fixture and found no wrong statement. This is the first time the panel showed a live reply; the citations were not clicked and no person has looked at it.
+- The README's commands were run as written from a clean clone, and its image path and links were checked.
+
 Live verification, on macOS with Node 24.21.0, October 12, 2026, model `claude-sonnet-5-5`:
 
 - `npm run check:ai:live` was run six times, 24 requests, 28 replies, sending only `fixtures/ai-eval.csv`. Every reply was read against the fixture.
@@ -123,7 +145,7 @@ After publication, CI on GitHub runs installation, type checking, tests and the 
 
 These need a person, and none has been done:
 
-- **A summary in the app with a real key.** The live check calls the server's routes directly; the panel has only been driven against a stand-in provider.
+- **A summary in the app with a real key, used by a person.** The live check calls the server's routes directly. The panel showed a live reply twice during the README capture, driven by a script; nobody clicked its citations.
 - **A person reading live summaries.** The replies were read by the coding agent. The checks cannot tell whether a sentence misreads a report, and numbers written as words are not checked; see `docs/REFERENCE.md`.
 - **Human visual review** of the interface in both themes, including comparison with the intended reference design.
 - **Full playback** of the demo video from start to finish.
@@ -163,4 +185,5 @@ To reproduce the tagged alpha exactly: `git checkout v0.1.0-alpha.8 && npm ci &&
 1. Read `AGENTS.md`, then this file.
 2. Check `git status`. The Remotion project in `demo/` and a related paragraph in `AGENTS.md` are deliberately uncommitted; leave them unless asked.
 3. Re-run the checks above before changing anything.
-4. Push `main` and the `alpha.7` and `alpha.8` tags only when asked.
+4. Start with the deeper AI validation listed under "First task next session". Do not add features before it.
+5. Do not publish to npm or post to X unless asked.

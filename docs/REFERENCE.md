@@ -109,10 +109,20 @@ This is an early alpha. Expect rough edges.
 
 ## Roadmap
 
-Planned, not built. Order may change.
+Planned, not built. Order may change after the first item.
 
-1. Export of the reports themselves.
-2. A packaged launcher, so the app starts with one command.
+1. **Deeper AI validation, before any new feature.** The checks on the summary were exercised on a small sample (see [Live result](#ai-summary)). Next:
+   - Review live summaries through the actual browser panel, and click the citations.
+   - Use a larger, more varied synthetic evaluation set.
+   - Check numbers written as words.
+   - Check that figures attach to the correct report or category when several entities appear in one sentence.
+   - Check the scope of whole-analysis counts and of selected-category counts.
+   - Check wrong statuses, comparisons, ranking and exclusion explanations.
+   - Check ambiguous category names such as "Other".
+   - Record both unsupported claims that pass and accurate claims that are rejected.
+   - Repeat the live checks against the final code, and report the sample size and the actual outcomes.
+2. Export of the reports themselves.
+3. A packaged launcher, so the app starts with one command.
 
 ## How it is built
 
@@ -122,4 +132,4 @@ The only AI feature is the optional summary described above: one bounded model c
 
 ## Screenshots
 
-Light and dark versions of the overview, cost ranking, import, records and detail views are in [`screenshots/`](screenshots/). All use synthetic data.
+[`screenshots/`](screenshots/) holds the light and dark comparison used in the README, taken from `v0.1.0-alpha.8`, and light and dark versions of the overview, cost ranking, import, records and detail views taken at `v0.1.0-alpha.6`, before the summary button existed. All use synthetic data.
