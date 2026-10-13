@@ -51,7 +51,7 @@ CI runs installation, type checking, the tests and the build on Linux for every 
 
 Put code in the folder that owns it: quality rules in `src/modules/quality`, shared entities and storage in `src/core`, the server in `src/server`, the interface in `src/ui`, model adapters and prompts in `src/ai`.
 
-Tests never call a real model: replies are scripted. If you change the AI summary, also run `npm run check:ai:live` with your own key and say what it reported. It sends only the synthetic `fixtures/ai-eval.csv`.
+Tests never call a real model or download one: replies, the download server and the runtime are scripted. If you change the AI summary, also run `npm run check:ai:live` with your own key and `npm run check:ai:eval` with offline AI enabled, and say what they reported. They use only the synthetic `fixtures/ai-eval.csv` and `fixtures/ai-eval-varied.csv`; the online cases send those files to the provider.
 
 ## Pull requests
 

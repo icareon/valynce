@@ -28,6 +28,7 @@ type Script = (request: ModelRequest, call: number) => Promise<string> | string;
 function scripted(script: Script) {
   const requests: ModelRequest[] = [];
   const provider: ModelProvider = {
+    location: 'online',
     name: 'Test provider',
     model: 'test-model',
     host: 'provider.test',
@@ -146,7 +147,7 @@ test('a selection over the limit is refused, not cut short, and a long text is m
   const all = buildEvidence(storage.list(), COUNT);
   assert.ok(!all.ok);
   assert.equal(all.reason, 'too_many_records');
-  assert.match(all.message, /201 reports.*at most 200.*does not send a partial selection/);
+  assert.match(all.message, /201 reports.*at most 200.*does not use a partial selection/);
 
   // Selecting one category brings it under the limit, and the request says which reports it holds.
   const even = buildEvidence(storage.list(), { ...COUNT, category: 'Even' });
@@ -293,6 +294,52 @@ test('a fact may say that a cause is not verified, and a gap may ask for a verif
     const claim = validateSummary({ ...summary, findings: [{ kind: 'fact', statement, recordIds: ['AE-006'] }] }, bundle, facts);
     assert.ok(!claim.ok && claim.problems.some((p) => /states or implies a root cause/.test(p)), statement);
   }
+});
+
+test('on the varied set: what the checks catch, and the wrong statements they are known to let through', async () => {
+  const storage = new NcrStorage(':memory:');
+  const app = createApp({ storage, loadSample: () => [], uiDir: join(root, 'tests', 'no-ui-here') });
+  const text = readFileSync(join(root, 'fixtures', 'ai-eval-varied.csv'), 'utf8');
+  assert.equal((await app.request('/api/import/commit', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ fileName: 'ai-eval-varied.csv', text }) })).status, 200);
+  const all = evidence(COST, storage);
+  const count = evidence(COUNT, storage);
+  const other = evidence({ ...COST, category: 'Other' }, storage);
+  // By hand: $14,651.50 in 19 of 30 reports; 8 with no cost; 3 in another or no currency; Other is fifth with $117.00.
+  assert.ok(all.facts[1]!.startsWith('Total: $14,651.50 from 19 of 30 reports.'));
+  assert.equal(other.bundle.categories.find((c) => c.category === 'Other')?.rank, 5);
+
+  type Finding = AiSummary['findings'][number];
+  const check = (e: typeof all, finding: Finding | null, overview = 'The ranking shows where cost is recorded.') =>
+    validateSummary({ overview, findings: finding === null ? [] : [finding], missingInformation: [], nextSteps: [] }, e.bundle, e.facts);
+  const fact = (statement: string, recordIds: string[]): Finding => ({ kind: 'fact', statement, recordIds });
+  const caught = (result: ReturnType<typeof check>, reason: RegExp) => assert.ok(!result.ok && result.problems.some((p) => reason.test(p)), JSON.stringify(result));
+
+  // Caught: structure, citations, a figure on the wrong report, and the forbidden claims.
+  caught(check(all, fact('EV-013 records a cost of 6400.00.', ['EV-013'])), /contains a figure \(6400\)/);
+  caught(check(all, fact('EV-012 is the largest cost.', ['EV-999'])), /cites "EV-999", which is not a report ID/);
+  caught(check(all, fact('The verified root cause is supplier negligence.', ['EV-019'])), /states or implies a root cause/);
+  caught(check(all, null, 'Fixing Material could save 75000 dollars.'), /estimates savings/);
+  caught(check(all, fact('The Other category groups packaging and paperwork problems.', ['EV-001'])), /is about Other but cites no report in that category/);
+  // "Other" as a category name does not get in the way of the ordinary word.
+  assert.ok(check(all, fact('The other Material reports have no cost recorded.', ['EV-015', 'EV-030'])).ok);
+  assert.ok(check(all, fact('The Other category groups packaging and paperwork problems.', ['EV-017', 'EV-018'])).ok);
+  assert.ok(check(all, fact('EV-012 records 6400.00 and EV-013 records 4100.00.', ['EV-012', 'EV-013'])).ok);
+
+  // Known gaps. Each of these is wrong and is accepted, because the checks test traceability and wording,
+  // not meaning. They are listed so that a change which closes one shows up here. See docs/REFERENCE.md.
+  const gaps: [string, ReturnType<typeof check>][] = [
+    ['a count written as a word: three reports give tool wear, not four', check(count, fact('Four Dimensional reports give tool wear as the reported cause.', ['EV-001', 'EV-002', 'EV-029']))],
+    ['two reports named, their figures swapped', check(all, fact('EV-012 records 4100.00 and EV-013 records 6400.00.', ['EV-012', 'EV-013']))],
+    ['two categories named, their figures swapped', check(all, null, 'Material holds 1505.50 and Dimensional holds 11472.00.')],
+    ['a whole-analysis count given to one category: Material has 2 reports with no cost, not 8', check(all, fact('Material has 8 reports with no cost.', ['EV-015', 'EV-030']))],
+    ['the same with one category selected: Other has 1, not 8', check(other, fact('Other has 8 reports with no cost.', ['EV-019']))],
+    ['a wrong status and disposition: EV-016 is open and scrapped', check(all, fact('EV-016 is closed and was returned to the supplier.', ['EV-016']))],
+    ['a wrong comparison: EV-012 is the higher cost', check(all, fact('EV-013 records a higher cost than EV-012.', ['EV-012', 'EV-013']))],
+    ['a wrong ranking: Material is first', check(all, null, 'Dimensional is ranked first by recorded cost, ahead of Material.')],
+    ['a wrong reason for an exclusion: EV-014 has a cost, in EUR', check(all, fact('EV-014 is left out because it has no cost recorded.', ['EV-014']))],
+    ['a category figure reached through the ordinary word "Other"', check(all, null, 'Other categories hold 117.00 in total.')],
+  ];
+  for (const [what, result] of gaps) assert.ok(result.ok, `no longer a gap, update the documentation: ${what}`);
 });
 
 // ---------- the request, end to end with a scripted model ----------

@@ -22,7 +22,7 @@ Read `docs/SESSION_CHECKPOINT.md` before starting. It records where work stopped
 | `src/server` | Local backend |
 | `src/modules/quality` | NCR rules and analysis |
 | `src/core` | Shared entities and storage |
-| `src/ai` | Model adapters and prompts |
+| `src/ai` | Model adapters and prompts; `src/ai/local` manages the offline model and its runtime |
 | `src/cli` | NPX launcher |
 | `fixtures` | Synthetic example records |
 | `tests` | Meaningful correctness checks |
@@ -101,9 +101,16 @@ These terms keep their shop-floor meaning. Do not rename, merge or reinterpret t
 - The server binds to `127.0.0.1` only and refuses requests under other host names and writes from other origins. Do not loosen this.
 - Model provider keys stay in the server process. They are never sent to the browser.
 - Records are sent to an AI provider only when the user explicitly triggers it for that request. Nothing is sent in the background.
-- With no key configured the app makes no outside request at all, and every analysis still works.
+- With no key configured the app sends no records anywhere, and every analysis still works.
+- The only other outside request is the offline AI download, and only after the user chooses "Enable offline AI" and confirms the size shown. Nothing is downloaded, checked for updates or started at start-up.
+- The offline model runs in a child process that listens on `127.0.0.1` only, behind a key made up for that run, with its own web page and downloads turned off.
 
 ## AI summary rules
+
+- **Two providers, never swapped.** "Offline · Private" runs a small model on this computer; "Online · Frontier" sends the evidence to the configured provider after confirmation. The user's choice is remembered in the browser. The server generates with the provider named in the request or refuses; it never falls back from one to the other, and a stored summary keeps the provider it came from.
+- **The offline summary is the shorter one.** Qwen3 1.7B was tested on the full task and was not reliable, so offline Valynce writes the figures, the ranked finding, the missing information and the suggested checks (`src/modules/quality/guidedSummary.ts`), and the model writes only an overview and one sentence per leading category, from descriptions alone. Do not widen that task, or change the model, without repeating `npm run check:ai:eval` and recording the result. Never substitute a larger model silently.
+- **Pinned downloads.** The offline model and runtime are fixed in `src/ai/local/assets.ts` by URL, size and SHA-256. A file is downloaded to a temporary name, verified, and only then moved into place; a verified file is reused. They are stored in the offline AI folder (`resolveAiDir` in `src/core/paths.ts`), outside the repository and the package, and are never committed. Check the publisher's current documentation and licence before changing a pin.
+- **Offline limits.** The offline model has its own limits in `guidedSummary.ts`, set from tests with the real model. A selection over them is refused with a request to narrow it, like any other.
 
 - **One bounded call.** A summary is one model request with a schema-bound reply, plus at most one repair request when the first reply fails a check (`src/ai/summarize.ts`). No agent framework, no tool use, no loop. The request has a time limit and an output limit.
 - **One adapter.** Provider-specific code stays in its adapter behind `ModelProvider` (`src/ai/provider.ts`); today that is `src/ai/anthropic.ts`. Prompt text and the reply schema live in `src/ai/prompt.ts`. Check the provider's current documentation before changing either.
@@ -117,7 +124,7 @@ These terms keep their shop-floor meaning. Do not rename, merge or reinterpret t
 - **Facts and hypotheses stay apart.** Each finding is one or the other, cites report IDs and is labelled as such. A summary is always labelled "AI-generated draft".
 - **Tied to its snapshot.** A stored summary keeps the scope, figures, report IDs and a fingerprint of its evidence. When the current analysis differs it is marked outdated and is never regenerated without the user asking.
 - **Keys.** The API key is read from the environment, stays in the server process, and is never written to the database, the logs or the browser.
-- **Tests** use scripted replies and prove what Valynce accepts and rejects. Only `npm run check:ai:live` shows how a real model behaves; never claim the summary works from mocked tests alone.
+- **Tests** use scripted replies, a pretend download server and a pretend runtime, and prove what Valynce accepts, rejects and does around a model. Only `npm run check:ai:live` and `npm run check:ai:eval` show how a real model behaves; never claim the summary works, online or offline, from mocked tests alone.
 
 ## Dependencies and commands
 
@@ -132,6 +139,7 @@ These terms keep their shop-floor meaning. Do not rename, merge or reinterpret t
 | `npm run typecheck` | Type-checks UI, backend and tests |
 | `npm run check:browser` | Drives the built app in headless Chrome: clicks, keyboard, filters, both themes, restarts, layout and contrast. Needs `npm run build` first and a local Chrome |
 | `npm run check:ai:live` | Sends the synthetic `fixtures/ai-eval.csv` to the configured provider and reports whether real replies pass every check. Needs `ANTHROPIC_API_KEY` |
+| `npm run check:ai:eval` | Runs ten cases on the synthetic `fixtures/ai-eval-varied.csv` with the installed offline model and, when a key is set, the online provider, and prints every reply with timings. Add `-- offline` or `-- online` for one of them |
 | `npm run demo:record` | Records the 20-second Pareto demo to `demo/out/` (git-ignored) using headless Chrome |
 | `npm run build` | Builds the UI and backend into `dist` |
 | `npm start` | Serves the built app at `http://127.0.0.1:4310` |

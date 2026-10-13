@@ -165,9 +165,6 @@ export function ParetoPanel(props: {
   onSeries: (unit: string | null) => void;
   selected: string | null | undefined;
   onSelect: (category: string | null | undefined) => void;
-  /** Opens the confirmation for an AI summary of this analysis. It sends nothing by itself. */
-  onSummary: () => void;
-  summaryBusy: boolean;
 }) {
   const { result, stored, selected, onSelect } = props;
   const metric = result.metric;
@@ -247,9 +244,6 @@ export function ParetoPanel(props: {
             <Icon name="download" />
             Export CSV
           </button>
-          <button type="button" className="btn" disabled={props.summaryBusy} onClick={props.onSummary}>
-            {props.summaryBusy ? 'Generating…' : 'Generate summary'}
-          </button>
           <button
             type="button"
             className="icon-btn"
@@ -292,8 +286,9 @@ export function ParetoPanel(props: {
             status filter.
           </li>
           <li>
-            <strong>Generate summary</strong> is optional. It first shows what would be sent to an external AI provider and
-            sends nothing until you confirm. The figures beside a summary are computed here, not by the model.
+            <strong>AI analysis</strong>, below the chart, is optional. Offline it runs on this computer; online it first
+            shows what would be sent to the provider and sends nothing until you confirm. The figures beside a summary
+            are computed here, not by the model.
           </li>
         </ul>
       </div>

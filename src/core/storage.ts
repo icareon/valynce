@@ -78,6 +78,10 @@ const MIGRATIONS: readonly string[] = [
     attempts INTEGER NOT NULL
   ) STRICT;
   `,
+  // 6: where a summary was generated. Every summary stored before this came from the online provider.
+  `
+  ALTER TABLE ai_summary ADD COLUMN location TEXT NOT NULL DEFAULT 'online';
+  `,
 ];
 
 const INSERT_NCR = `
@@ -119,6 +123,8 @@ export interface ImportBatchInput {
 
 /** A generated summary as stored: the text, what it was generated from and who generated it. */
 export interface SummaryInput {
+  /** 'offline' when the model ran on this computer, 'online' when the data went to an external provider. */
+  location: 'offline' | 'online';
   provider: string;
   model: string;
   /** Identifies the exact evidence the summary was generated from. */
@@ -127,7 +133,7 @@ export interface SummaryInput {
   scope: unknown;
   /** The figures Valynce computed for that analysis, as sentences. */
   facts: string[];
-  /** NCR IDs of the reports that were sent. */
+  /** NCR IDs of the reports the model was given. */
   recordIds: string[];
   /** The validated summary, kept as JSON. */
   summary: unknown;
@@ -302,8 +308,8 @@ export class NcrStorage {
       this.#db
         .prepare(`
           INSERT INTO ai_summary (
-            created_at, provider, model, fingerprint, scope_json, facts_json, record_ids_json, summary_json, duration_ms, attempts
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            created_at, provider, model, fingerprint, scope_json, facts_json, record_ids_json, summary_json, duration_ms, attempts, location
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `)
         .run(
           createdAt,
@@ -316,6 +322,7 @@ export class NcrStorage {
           JSON.stringify(input.summary),
           Math.round(input.durationMs),
           input.attempts,
+          input.location,
         );
     });
     return this.latestSummary()!;
@@ -327,6 +334,7 @@ export class NcrStorage {
     return {
       id: row.id as number,
       createdAt: row.created_at as string,
+      location: row.location === 'offline' ? 'offline' : 'online',
       provider: row.provider as string,
       model: row.model as string,
       fingerprint: row.fingerprint as string,

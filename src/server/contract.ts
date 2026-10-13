@@ -11,6 +11,7 @@ import type {
   NumberFormat,
   PlannedRow,
 } from '../modules/quality/importRules.ts';
+import type { AiLocation, OfflineStatus } from '../ai/provider.ts';
 import type { AiSummary } from '../modules/quality/summaryRules.ts';
 import type { NcrTotals } from '../modules/quality/totals.ts';
 
@@ -84,6 +85,8 @@ export interface RemoveSampleResponse {
 export interface SummaryRecord {
   id: number;
   createdAt: string;
+  /** Where it was generated. Fixed when it is stored; choosing another provider later does not change it. */
+  location: AiLocation;
   provider: string;
   model: string;
   /** Identifies the exact evidence it was generated from. */
@@ -91,7 +94,7 @@ export interface SummaryRecord {
   scope: AnalysisScope;
   /** Scope and figures as Valynce computed them when the summary was generated. */
   facts: string[];
-  /** NCR IDs of the reports that were sent. */
+  /** NCR IDs of the reports the model was given. */
   recordIds: string[];
   summary: AiSummary;
   durationMs: number;
@@ -101,16 +104,25 @@ export interface SummaryRecord {
 
 export interface SummaryCheckRequest {
   scope: AnalysisScope;
+  /** Which provider the user has selected. The limits differ. Defaults to online. */
+  location?: AiLocation;
 }
 
 /** What a summary of the current analysis would send, and the state of the last one. Nothing is sent to produce this. */
 export interface SummaryCheckResponse {
-  /** Null when no API key is configured. The key itself never leaves the server. */
+  /** The provider the request below was worked out for. */
+  location: AiLocation;
+  /** The online provider. Null when no API key is configured. The key itself never leaves the server. */
   provider: { name: string; model: string; host: string } | null;
+  /** The offline AI on this computer: installed or not, and what a set-up would download. */
+  offline: OfflineStatus;
+  /** What the offline model reads for each report, in words. */
+  offlineFields: string[];
   /** What would be sent. `ok: false` carries the reason this analysis cannot be summarised as it stands. */
   request:
     | { ok: true; fingerprint: string; disclosure: EvidenceDisclosure; facts: string[] }
     | { ok: false; reason: string; message: string };
+  /** Limits for the selected provider. */
   limits: { records: number; categories: number; textChars: number; timeoutSeconds: number };
   latest: SummaryRecord | null;
   /** True when `latest` was generated from different evidence than the current analysis. */
@@ -121,13 +133,18 @@ export interface SummaryGenerateRequest {
   scope: AnalysisScope;
   /** From the check the user confirmed. The request is refused if the evidence has changed since. */
   fingerprint: string;
-  /** Must be true: the user confirmed sending this data to the provider. */
+  /** Must be true: the user confirmed this request, and for the online provider that this data is sent to it. */
   confirmed: boolean;
+  /** The provider the user selected and confirmed. Never substituted by the server. Defaults to online. */
+  location?: AiLocation;
 }
 
 export interface SummaryGenerateResponse {
   summary: SummaryRecord;
 }
+
+/** The offline AI's state. Returned by the routes that start, cancel and remove its download. */
+export type OfflineStatusResponse = OfflineStatus;
 
 export interface RemoveSummaryResponse {
   deleted: boolean;

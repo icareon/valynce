@@ -940,14 +940,19 @@ select.field {
   }
 }
 
-/* ---------- AI summary ---------- */
+/* ---------- AI analysis ---------- */
 
 .summary {
   margin-bottom: var(--space-5);
   padding: var(--space-4);
 }
 
-/* The heading takes focus when the panel is opened, so the ring hugs its text. */
+/* The block that takes focus when a question is opened shows its ring like any control. */
+.summary-block:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
 .summary > .section-title {
   width: fit-content;
   max-width: 100%;
@@ -1147,29 +1152,230 @@ button.cite:hover {
   border-top: 1px solid var(--border);
 }
 
-.summary-pulse {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
-  margin-right: var(--space-2);
-  background: var(--text-3);
+/* The provider choice: two options side by side, stacked on a narrow screen. */
+.provider-choice {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  max-width: 76ch;
+  margin: var(--space-3) 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.provider-option {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  padding: var(--space-3);
+  background: var(--panel);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+}
+
+.provider-option:hover {
+  background: var(--panel-hover);
+}
+
+.provider-option.is-selected {
+  background: var(--accent-wash);
+  border-color: var(--accent-line);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.provider-option input {
+  flex: none;
+  width: var(--icon);
+  height: var(--icon);
+  margin: 2px 0 0;
+  accent-color: var(--accent);
+}
+
+.provider-option:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.provider-option:has(input:disabled) {
+  cursor: default;
+}
+
+.provider-body {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.provider-title {
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.provider-text {
+  color: var(--text-2);
+  font-size: var(--text-sm);
+}
+
+.provider-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-1);
+  color: var(--text-2);
+  font-size: var(--text-xs);
+}
+
+.provider-meta .mono {
+  overflow-wrap: anywhere;
+}
+
+.summary-action {
+  align-items: center;
+  margin-top: var(--space-3);
+}
+
+.summary-hint {
+  color: var(--text-3);
+  font-size: var(--text-xs);
+}
+
+.provider-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: center;
+  max-width: 76ch;
+  margin-top: var(--space-3);
+}
+
+.provider-status .mono {
+  overflow-wrap: anywhere;
+}
+
+/* A real measure of the download: bytes received of bytes expected. */
+.download-progress {
+  display: block;
+  width: 100%;
+  height: 6px;
+  overflow: hidden;
+  appearance: none;
+  background: var(--panel-hover);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.download-progress::-webkit-progress-bar {
+  background: var(--panel-hover);
+}
+
+.download-progress::-webkit-progress-value {
+  background: var(--text-2);
+}
+
+.download-progress::-moz-progress-bar {
+  background: var(--text-2);
+}
+
+/* While a summary is generated: dots travelling round a square. Decoration only;
+   it measures nothing, and the text beside it carries the status. */
+.analyzing {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3);
+}
+
+.analyzing > div {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.analyzing-title {
+  color: var(--text);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.analyzing-square {
+  --square: 28px;
+  --dot: 6px;
+  position: relative;
+  display: block;
+  width: var(--square);
+  height: var(--square);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.analyzing-square i {
+  position: absolute;
+  top: calc(var(--dot) / -2 - 0.5px);
+  left: calc(var(--dot) / -2 - 0.5px);
+  width: var(--dot);
+  height: var(--dot);
+  background: var(--accent);
   border-radius: 50%;
-  animation: summary-pulse 1.2s var(--ease) infinite alternate;
+  animation: analyzing-orbit 2.4s linear infinite;
 }
 
-@keyframes summary-pulse {
-  from {
-    opacity: 0.25;
+.analyzing-square i:nth-child(2) {
+  animation-delay: -0.6s;
+}
+
+.analyzing-square i:nth-child(3) {
+  animation-delay: -1.2s;
+}
+
+.analyzing-square i:nth-child(4) {
+  animation-delay: -1.8s;
+}
+
+@keyframes analyzing-orbit {
+  0% {
+    transform: translate(0, 0);
   }
 
-  to {
-    opacity: 1;
+  25% {
+    transform: translate(var(--square), 0);
+  }
+
+  50% {
+    transform: translate(var(--square), var(--square));
+  }
+
+  75% {
+    transform: translate(0, var(--square));
+  }
+
+  100% {
+    transform: translate(0, 0);
   }
 }
 
+/* Without motion the four dots rest on the corners: a static dotted square. */
 @media (prefers-reduced-motion: reduce) {
-  .summary-pulse {
+  .analyzing-square i {
     animation: none;
+  }
+
+  .analyzing-square i:nth-child(2) {
+    transform: translate(var(--square), 0);
+  }
+
+  .analyzing-square i:nth-child(3) {
+    transform: translate(var(--square), var(--square));
+  }
+
+  .analyzing-square i:nth-child(4) {
+    transform: translate(0, var(--square));
+  }
+}
+
+@media (max-width: 640px) {
+  .provider-choice {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

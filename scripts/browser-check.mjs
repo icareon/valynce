@@ -3,11 +3,13 @@
 // It starts its own server on a spare port with a throwaway database, so it
 // never touches real Valynce data. Chrome is found at CHROME_PATH or the usual places.
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { gzipSync } from 'node:zlib';
 
 const root = resolve(import.meta.dirname, '..');
 const shotsDir = resolve(process.argv[2] ?? join(tmpdir(), 'valynce-browser-check'));
@@ -96,13 +98,82 @@ const modelServer = createHttpServer((request, response) => {
 });
 await new Promise((done) => modelServer.listen(0, '127.0.0.1', done));
 const modelHost = `127.0.0.1:${modelServer.address().port}`;
+// A stand-in for the offline AI's downloads and runtime, also on this machine: a
+// small file in place of the model, and a script in place of llama-server that
+// answers with one citation per theme taken from the schema it is given.
+const FAKE_RUNTIME = `#!/usr/bin/env node
+const http = require('node:http');
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const port = Number(args[args.indexOf('--port') + 1]);
+const model = args[args.indexOf('-m') + 1];
+http.createServer((request, response) => {
+  if (request.url === '/health') return response.end('{"status":"ok"}');
+  let body = '';
+  request.on('data', (chunk) => (body += chunk));
+  request.on('end', () => {
+    fs.appendFileSync(model + '.requests', body + '\\n');
+    if (fs.existsSync(model + '.slow')) return; // never answers; Valynce must give up or be cancelled
+    const schema = JSON.parse(body).response_format.json_schema.schema;
+    const reply = { overview: 'The reports describe labeling, dimensional and material problems.' };
+    for (const key of schema.required.filter((k) => k !== 'overview')) {
+      reply[key] = { statement: 'The reports in this category describe similar problems.', recordIds: [schema.properties[key].properties.recordIds.items.enum[0]] };
+    }
+    response.setHeader('content-type', 'application/json');
+    response.end(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(reply) } }], usage: { prompt_tokens: 1, completion_tokens: 1 } }));
+  });
+}).listen(port, '127.0.0.1');
+process.on('SIGTERM', () => process.exit(0));
+`;
+function tarEntry(name, type, body = Buffer.alloc(0)) {
+  const header = Buffer.alloc(512);
+  header.write(name, 0, 100);
+  header.write('0000755\0', 100, 8);
+  header.write(body.length.toString(8).padStart(11, '0') + '\0', 124, 12);
+  header.write('        ', 148, 8);
+  header.write(type, 156, 1);
+  let sum = 0;
+  for (const byte of header) sum += byte;
+  header.write(sum.toString(8).padStart(6, '0') + '\0 ', 148, 8);
+  return Buffer.concat([header, body, Buffer.alloc((512 - (body.length % 512)) % 512)]);
+}
+const fakeModel = Buffer.alloc(3_000_000, 7);
+const fakeArchive = gzipSync(Buffer.concat([tarEntry('fake-rt/', '5'), tarEntry('fake-rt/llama-server', '0', Buffer.from(FAKE_RUNTIME)), Buffer.alloc(1024)]));
+const downloadsSeen = [];
+let slowDownloads = false;
+const downloadServer = createHttpServer(async (request, response) => {
+  downloadsSeen.push(request.url);
+  const data = request.url === '/model.gguf' ? fakeModel : request.url === '/rt.tar.gz' ? fakeArchive : null;
+  if (data === null) return response.writeHead(404).end();
+  response.writeHead(200);
+  for (let at = 0; at < data.length && !response.destroyed; at += 100_000) {
+    response.write(data.subarray(at, at + 100_000));
+    if (slowDownloads) await sleep(150);
+  }
+  response.end();
+});
+await new Promise((done) => downloadServer.listen(0, '127.0.0.1', done));
+const downloadBase = `http://127.0.0.1:${downloadServer.address().port}`;
+const sha256 = (data) => createHash('sha256').update(data).digest('hex');
+const OFFLINE_ENV = {
+  CHECK_OFFLINE_MANIFEST: JSON.stringify({
+    model: { label: 'Check model', id: 'check-model-q4', file: 'model.gguf', source: 'downloads.test', url: `${downloadBase}/model.gguf`, bytes: fakeModel.length, sha256: sha256(fakeModel) },
+    runtime: { name: 'check runtime', build: 'c1', source: 'runtime.test', folder: 'fake-rt', program: 'llama-server', archive: { url: `${downloadBase}/rt.tar.gz`, bytes: fakeArchive.length, sha256: sha256(fakeArchive) } },
+  }),
+};
+const OFFLINE_SERVER = 'scripts/browser-check-server.mjs';
+
 const AI_ENV = { ANTHROPIC_API_KEY: 'browser-check-not-a-real-key', VALYNCE_AI_BASE_URL: `http://${modelHost}`, VALYNCE_AI_TIMEOUT_SECONDS: '2' };
 
-async function startServer(extra = {}) {
-  server = spawn(process.execPath, ['dist/server/main.js'], {
+// The offline AI's files go to a throwaway folder as well, so a model installed on
+// this computer is neither used nor touched, and nothing real is ever downloaded.
+const aiDir = join(work, 'offline-ai');
+
+async function startServer(extra = {}, entry = 'dist/server/main.js') {
+  server = spawn(process.execPath, [entry], {
     cwd: root,
     // No key unless a check asks for one, whatever the shell running the checks has set.
-    env: { ...process.env, VALYNCE_DATA_DIR: dataDir, VALYNCE_PORT: String(appPort), VALYNCE_DEV_ORIGIN: '', ANTHROPIC_API_KEY: '', VALYNCE_AI_BASE_URL: '', VALYNCE_AI_MODEL: '', VALYNCE_AI_TIMEOUT_SECONDS: '', ...extra },
+    env: { ...process.env, VALYNCE_DATA_DIR: dataDir, VALYNCE_AI_DIR: aiDir, VALYNCE_PORT: String(appPort), VALYNCE_DEV_ORIGIN: '', ANTHROPIC_API_KEY: '', VALYNCE_AI_BASE_URL: '', VALYNCE_AI_MODEL: '', VALYNCE_AI_TIMEOUT_SECONDS: '', ...extra },
     stdio: 'ignore',
   });
   await until(async () => (await fetch(`${base}/api/ncrs`)).ok, 'the Valynce server');
@@ -878,15 +949,30 @@ async function run() {
   check('the 10 reports and their units survive a restart', await page(`byText('.records tbody tr', 'PC-009').querySelector('.col-qty').textContent === '2.5 kg'`));
 
   // --- Optional AI summary ---
-  const summaryButton = `byText('.pareto-controls .btn', 'Generate summary')`;
+  const summaryButton = `byText('.summary .btn', 'Generate summary')`;
   const panel = `text('.summary')`;
-  check('with no summary yet there is no summary panel, only the button beside the chart controls', await page(`$('.summary') === null && ${summaryButton} !== undefined`));
-  await click(summaryButton);
-  await waitFor(`$('.summary') !== null && ${panel}.includes('No AI provider is configured')`);
-  check('without a key the panel says nothing can be sent and how to configure one, with no send button', await page(`${panel}.includes('ANTHROPIC_API_KEY') && byText('.summary .btn', 'Send and generate') === undefined`), await page(panel));
+  const provider = (location) => `$('input[name="ai-provider"][value="${location}"]')`;
+  await waitFor(`$('.summary') !== null && !${panel}.includes('Checking')`);
+  const firstPanel = await page(panel);
+  check('the AI analysis section offers the two providers, named and described as specified', firstPanel.includes('AI analysis') && firstPanel.includes('Offline · Private') && firstPanel.includes('Analyze on this computer. NCR data stays on this device.') && firstPanel.includes('Qwen3 1.7B') && firstPanel.includes('Online · Frontier') && firstPanel.includes('Analyze with Claude. Selected NCR data is sent to Anthropic after confirmation.'), firstPanel);
+  check('nothing is claimed about certified, guaranteed or validated output', !/certif|guarantee|validated|verified root-cause analysis/i.test(firstPanel), firstPanel);
+  check('with nothing chosen yet the private option is selected, it is not installed, and no summary can be generated or is shown', await page(`${provider('offline')}.checked && ${panel}.includes('Not installed') && ${summaryButton}.disabled === true && $('.summary-result') === null`), firstPanel);
+  check('the real offline download is stated before anything is fetched: 1.29 GB', firstPanel.includes('one-time download of 1.29 GB') && firstPanel.includes('downloaded until you confirm it'), firstPanel);
+  await click(`byText('.summary .btn', 'Enable offline AI')`);
+  await waitFor(`byText('.summary .btn', 'Download 1.29 GB') !== undefined`);
+  const setupText = await page(panel);
+  check('enabling offline AI first shows the model and runtime, their sizes and sources, and where they are kept', setupText.includes('Qwen3 1.7B model (1.28 GB, from huggingface.co/ggml-org/Qwen3-1.7B-GGUF)') && setupText.includes('llama.cpp runtime') && setupText.includes('from github.com/ggml-org/llama.cpp') && setupText.includes(aiDir), setupText);
+  check('asking about the download creates no files and starts nothing', !existsSync(aiDir));
+  await click(`byText('.summary .btn', 'Cancel')`);
+  await waitFor(`byText('.summary .btn', 'Download 1.29 GB') === undefined`);
+
+  await page(`(${provider('online')}.focus(), 0)`);
+  await click(provider('online'));
+  await waitFor(`${panel}.includes('No online AI provider is configured')`);
+  check('without a key the online option says nothing can be sent and how to configure one, and cannot generate', await page(`${panel}.includes('ANTHROPIC_API_KEY') && ${panel}.includes('Not configured') && ${summaryButton}.disabled === true && byText('.summary .btn', 'Send and generate') === undefined`), await page(panel));
+  check('choosing a provider is remembered in this browser and generates nothing', (await page(`localStorage.getItem('valynce.ai.provider')`)) === 'online' && (await page(`$('.summary-result') === null && $('.analyzing') === null`)));
   check('without a key the chart and the records list still work', (await page(barValues)).length === 4 && (await page(rowCount)) === 10);
-  await click(`byText('.summary .btn', 'Close')`);
-  await waitFor(`$('.summary') === null`);
+  await inBothThemes('ai-providers', { sizes: [[1440, 900], [390, 800]] });
 
   await stopServer();
   await startServer(AI_ENV);
@@ -896,15 +982,17 @@ async function run() {
   await waitFor(`text('#chart-title') === 'Recorded cost (USD) by category'`);
   await sleep(400);
   check('loading the page, switching the metric and filtering send nothing to the provider', model.requests.length === 0, String(model.requests.length));
+  await waitFor(`${summaryButton}.disabled === false`);
+  check('after a restart the online option is still the selected one and shows the configured model', await page(`${provider('online')}.checked && ${panel}.includes('claude-sonnet-5-5') && !${panel}.includes('Not configured')`), await page(panel));
   await click(summaryButton);
   await waitFor(`${panel}.includes('Send this analysis to an AI provider?') && byText('.summary .btn', 'Send and generate') !== undefined`);
   const confirmText = await page(panel);
   check('the confirmation names the provider, the model and where the data goes', confirmText.includes('Anthropic') && confirmText.includes('claude-sonnet-5-5') && confirmText.includes(modelHost) && confirmText.includes('an external AI provider'), confirmText);
   check('the confirmation states the report count and the fields sent and withheld', confirmText.includes('10 reports') && confirmText.includes('NCR ID, opened date, defect category, description, status, disposition, reported cause, recorded cost when stated in USD') && /Not sent\s*supplier, part number, original file cells, file name and row number, affected quantity/.test(confirmText), confirmText);
-  check('opening the confirmation moves keyboard focus to it and still sends nothing', await page(`document.activeElement.id === 'summary-title'`) && model.requests.length === 0);
+  check('opening the confirmation moves keyboard focus to it and still sends nothing', await page(`document.activeElement.classList.contains('summary-block')`) && model.requests.length === 0);
   await inBothThemes('summary-confirm');
   await click(`byText('.summary .btn', 'Cancel')`);
-  await waitFor(`$('.summary') === null`);
+  await waitFor(`byText('.summary .btn', 'Send and generate') === undefined`);
   check('cancelling sends nothing', model.requests.length === 0);
 
   await click(summaryButton);
@@ -916,7 +1004,7 @@ async function run() {
   check('the request carries the report IDs and descriptions but no part numbers, file name or original cells', sent.includes('PC-008') && sent.includes('Wrong alloy delivered') && !sent.includes('PC-300') && !sent.includes('pareto-check.csv') && !sent.includes('Part No'), sent.slice(0, 300));
   check('the euro cost is not sent, converted or zeroed: the report is marked as left out', !sent.includes('300') && sent.includes('cost_in_another_or_no_currency'));
   const resultText = await page(panel);
-  check('the summary is labelled an AI-generated draft with its model and time', resultText.includes('AI-generated draft') && resultText.includes('Anthropic · claude-sonnet-5-5 · generated') && resultText.includes('10 reports sent'), resultText);
+  check('the summary is labelled an AI-generated draft with its model and time', resultText.includes('AI-generated draft · Review against source records') && resultText.includes('Online · Anthropic · claude-sonnet-5-5 · generated') && resultText.includes('10 reports sent'), resultText);
   check('the figures beside it are Valynce\'s own and match the chart: $1,000.00 from 7 of 10, Material $850.00 at 85.0%', resultText.includes('computed by Valynce') && resultText.includes('Total: $1,000.00 from 7 of 10 reports.') && resultText.includes('1. Material: $850.00, 85.0% of the total, from 1 report.'), resultText);
   check('facts and hypotheses are labelled differently', JSON.stringify(await page(`$$('.summary-findings .tag').map((t) => t.textContent)`)) === JSON.stringify(['From the reports', 'Hypothesis, not verified']));
   check('the summary says it is not a verified root cause', resultText.includes('Nothing here is a verified root cause'));
@@ -957,12 +1045,12 @@ async function run() {
 
   // A reply that breaks the rules: one repair, then a clear failure, and the earlier summary is kept.
   model.mode = 'bad';
-  await click(`byText('.summary .btn', 'Generate again')`);
+  await click(`byText('.summary .btn', 'Generate summary again')`);
   await waitFor(`byText('.summary .btn', 'Send and generate') !== undefined`);
   await click(`byText('.summary .btn', 'Send and generate')`);
   await waitFor(`$('.summary-alert') !== null`);
   const failedText = await page(panel);
-  check('an invalid reply gets one repair attempt and then a clear failure', model.requests.length === 3 && failedText.includes('The summary was not generated') && failedText.includes('Nothing was saved') && failedText.includes('PC-999') && failedText.includes('root cause'), failedText.slice(0, 500));
+  check('an invalid reply gets one repair attempt and then a clear failure', model.requests.length === 3 && failedText.includes('Not generated.') && failedText.includes('Nothing was saved') && failedText.includes('PC-999') && failedText.includes('root cause'), failedText.slice(0, 500));
   check('the earlier valid summary is still shown after the failure', failedText.includes('wrong alloy delivery') && await page(`$('.summary-outdated') === null`));
   await inBothThemes('summary-failed', { sizes: [[1440, 900]] });
 
@@ -971,8 +1059,18 @@ async function run() {
   await click(`byText('.summary .btn', 'Review and try again')`);
   await waitFor(`byText('.summary .btn', 'Send and generate') !== undefined`);
   await click(`byText('.summary .btn', 'Send and generate')`);
-  await waitFor(`${panel}.includes('Generating summary')`);
-  check('while waiting, the button is disabled so a second request cannot be sent', await page(`byText('.pareto-controls .btn', 'Generating…').disabled === true && byText('.summary .btn', 'Send and generate') === undefined`));
+  await waitFor(`${panel}.includes('Analyzing NCRs')`);
+  check('while waiting, the button is disabled so a second request cannot be sent', await page(`${summaryButton}.disabled === true && byText('.summary .btn', 'Send and generate') === undefined && ${provider('offline')}.disabled === true`));
+  const square = `getComputedStyle($('.analyzing-square i'))`;
+  const box = await page(`(() => { const r = $('.analyzing-square').getBoundingClientRect(); return { w: r.width, h: r.height, hidden: $('.analyzing-square').getAttribute('aria-hidden'), dots: $$('.analyzing-square i').length, status: $('.analyzing [role="status"]').textContent.trim(), percent: /\\d+\\s*%/.test($('.analyzing').textContent), progress: $('.analyzing progress') }; })()`);
+  check('while a summary is generated a small square with dots is shown beside "Analyzing NCRs…", hidden from screen readers, with the status in words', box.w >= 24 && box.w <= 32 && box.w === box.h && box.hidden === 'true' && box.dots === 4 && box.status === 'Analyzing NCRs…', JSON.stringify(box));
+  check('the animation shows no percentage and no progress bar', box.percent === false && box.progress === null, JSON.stringify(box));
+  const moving = await page(`${square}.animationName + ' ' + ${square}.animationDuration + ' ' + ${square}.backgroundColor`);
+  await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+  const still = await page(`${square}.animationName + ' ' + new Set($$('.analyzing-square i').map((i) => getComputedStyle(i).transform)).size`);
+  await cdp('Emulation.setEmulatedMedia', { features: [] });
+  check('the dots are orange and move by CSS alone; with reduced motion they rest on the four corners', moving.startsWith('analyzing-orbit 2.4s rgb(255, 90, 31)') && still === 'none 4', `${moving} | ${still}`);
+  await screenshot('summary-analyzing-light-1440x900');
   await click(`byText('.bar', 'Labeling')`);
   await waitFor(`${rowCount} === 4`);
   check('while waiting, the chart and the records list still respond', (await page(countText)) === '4 of 10 reports');
@@ -988,9 +1086,118 @@ async function run() {
   await viewport(1440, 900);
 
   await click(`byText('.summary .btn', 'Discard summary')`);
-  await waitFor(`$('.summary') === null`);
+  await waitFor(`$('.summary-result') === null`);
   check('discarding removes the stored summary', (await (await fetch(`${base}/api/summary/check`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ scope: { metric: 'cost', unit: null, search: '' } }) })).json()).latest === null);
   check('every request to the provider carried the key from the server environment, never from the page', model.requests.every((r) => r.key === AI_ENV.ANTHROPIC_API_KEY));
+
+
+  // --- Offline AI: set-up, generation on this computer, and no swapping of providers ---
+  // The real app, with a pretend model and runtime served from this machine. The online
+  // stand-in stays configured throughout, so a silent fall-back to it would be seen.
+  await stopServer();
+  await startServer({ ...AI_ENV, ...OFFLINE_ENV }, OFFLINE_SERVER);
+  await goto();
+  await waitFor(`${rowCount} === 10`);
+  await click(`byText('.seg button', 'Recorded cost')`);
+  await waitFor(`${summaryButton}.disabled === false`);
+  const onlineBefore = model.requests.length;
+  await click(provider('offline'));
+  await waitFor(`${panel}.includes('Offline AI is not installed')`);
+  check('selecting the offline option downloads nothing and generates nothing', downloadsSeen.length === 0 && !existsSync(aiDir) && (await page(`$('.analyzing') === null && $('.summary-result') === null && ${summaryButton}.disabled === true`)));
+  check('the offline option is not replaced by the configured online one', model.requests.length === onlineBefore && (await page(`${provider('offline')}.checked`)));
+
+  await click(`byText('.summary .btn', 'Enable offline AI')`);
+  await waitFor(`byText('.summary .btn', 'Download 3 MB') !== undefined`);
+  check('the size shown is the size of the files that will be fetched, and still nothing is fetched', (await page(panel)).includes('Check model model (3 MB, from downloads.test)') && downloadsSeen.length === 0, await page(panel));
+  slowDownloads = true;
+  await click(`byText('.summary .btn', 'Download 3 MB')`);
+  await waitFor(`$('.download-progress') !== null && $('.download-progress').value > 0`);
+  const progress = await page(`({ max: $('.download-progress').max, value: $('.download-progress').value, label: $('#offline-progress-label').textContent, square: $('.analyzing-square') })`);
+  check('the download has its own progress bar, measured in bytes, not the analyzing animation', progress.max === fakeModel.length + fakeArchive.length && progress.value > 0 && progress.value < progress.max && /Downloading the (model|runtime): .* of 3 MB/.test(progress.label) && progress.square === null, JSON.stringify(progress));
+  check('while downloading, a summary cannot be asked for and the analysis still works', (await page(`${summaryButton}.disabled === true`)) && (await page(barValues)).length === 3, JSON.stringify(await page(barValues)));
+  await screenshot('offline-downloading-light-1440x900');
+  await click(`byText('.summary .btn', 'Cancel download')`);
+  await waitFor(`${panel}.includes('Offline AI is not installed')`);
+  check('cancelling the download leaves nothing installed and no partial file', !existsSync(join(aiDir, 'installed.json')) && !existsSync(join(aiDir, 'model.gguf')) && !readdirSync(aiDir).some((name) => name.endsWith('.part')), existsSync(aiDir) ? readdirSync(aiDir).join(', ') : '');
+  slowDownloads = false;
+  await click(`byText('.summary .btn', 'Enable offline AI')`);
+  await click(`byText('.summary .btn', 'Download 3 MB')`);
+  await waitFor(`${panel}.includes('Offline AI is ready')`, 15000);
+  check('after the download the offline option is ready and a summary can be asked for', await page(`${summaryButton}.disabled === false && ${panel}.includes('Ready') && ${panel}.includes('no internet connection and no API key')`), await page(panel));
+  check('the verified files are in the offline AI folder, outside the project', existsSync(join(aiDir, 'installed.json')) && existsSync(join(aiDir, 'model.gguf')) && !aiDir.startsWith(root));
+  const fetched = downloadsSeen.length;
+
+  await click(summaryButton);
+  await waitFor(`byText('.summary .btn', 'Generate on this computer') !== undefined`);
+  const localConfirm = await page(`text('.summary-block')`);
+  check('the offline confirmation states the scope and that processing is local', localConfirm.includes('runs on this computer') && localConfirm.includes('are not sent anywhere') && localConfirm.includes('10 reports (the offline limit is 40)') && localConfirm.includes('NCR ID, defect category, description'), localConfirm);
+  check('the offline confirmation does not reuse the wording about sending data to a provider', !/This sends|external AI provider|Send and generate|Sent for each report|Anthropic/.test(localConfirm), localConfirm);
+  check('the offline confirmation says the summary is the shorter one and who writes what', localConfirm.includes('an offline summary is shorter') && localConfirm.includes('Valynce writes the figures'), localConfirm);
+  await inBothThemes('offline-confirm', { sizes: [[1440, 900], [390, 800]] });
+  check('before confirming, the local model has not been started', !existsSync(join(aiDir, 'model.gguf.requests')));
+  await click(`byText('.summary .btn', 'Generate on this computer')`);
+  await waitFor(`$('.summary-result') !== null && $('.analyzing') === null`, 15000);
+  const localResult = await page(panel);
+  check('the offline summary names where it was made, the model, the time and the reports read', localResult.includes('AI-generated draft · Review against source records') && /Offline · check-model-q4 · on this computer · generated .* · 10 reports read/.test(localResult), localResult);
+  check('its ranked finding is written by Valynce from the ranking: Material, $850.00, 85.00%, from 1 of its 2 reports', localResult.includes('Computed by Valynce') && localResult.includes('Material is ranked first by recorded cost (USD): $850.00, 85.00% of the total, from 1 of its 2 reports.') && localResult.includes('Total: $1,000.00 from 7 of 10 reports.'), localResult);
+  check('it says it is the shorter offline summary, a draft that can be wrong', localResult.includes('This is the shorter offline summary') && localResult.includes('It can be wrong') && localResult.includes('Nothing here is a verified root cause'));
+  const localRequests = readFileSync(join(aiDir, 'model.gguf.requests'), 'utf8').trim().split('\n');
+  check('one request went to the local model, with descriptions and no costs, suppliers or part numbers', localRequests.length === 1 && localRequests[0].includes('Wrong alloy delivered') && !localRequests[0].includes('850') && !localRequests[0].includes('PC-300'), localRequests[0].slice(0, 300));
+  check('generating offline contacted neither the online provider nor the download server', model.requests.length === onlineBefore && downloadsSeen.length === fetched, `${model.requests.length - onlineBefore} online, ${downloadsSeen.length - fetched} downloads`);
+  await page(`$('.summary').scrollIntoView()`);
+  await inBothThemes('offline-result', { sizes: [[1440, 900], [390, 800]] });
+  await fits('offline summary');
+
+  const firstCite = await page(`$('button.cite').textContent`);
+  await page(`($('button.cite').focus(), 0)`);
+  await press('Enter');
+  await waitFor(`$('.detail') !== null`);
+  check('a citation in an offline summary opens that report', (await page(`text('#detail-title')`)) === firstCite, firstCite);
+  await press('Escape');
+  await waitFor(`$('.detail') === null`);
+
+  await click(provider('online'));
+  await waitFor(`${provider('online')}.checked && ${summaryButton}.disabled === false`);
+  check('selecting the other provider does not relabel the stored summary or regenerate it', (await page(panel)).includes('Offline · check-model-q4 · on this computer') && model.requests.length === onlineBefore && (await page(`$('.summary-outdated') === null`)));
+  await click(`byText('.seg button', 'NCR reports')`);
+  await waitFor(`$('.summary-outdated') !== null`);
+  check('an offline summary is marked outdated when the metric changes', (await page(`text('.summary-outdated')`)).startsWith('Outdated.'));
+  await click(`byText('.seg button', 'Recorded cost')`);
+  await waitFor(`$('.summary-outdated') === null`);
+  await click(provider('offline'));
+  await waitFor(`${provider('offline')}.checked && ${summaryButton}.disabled === false`);
+
+  // A local model that never answers: cancelling stops it without an error, and the app stays usable.
+  writeFileSync(join(aiDir, 'model.gguf.slow'), '');
+  await click(summaryButton);
+  await waitFor(`byText('.summary .btn', 'Generate on this computer') !== undefined`);
+  await click(`byText('.summary .btn', 'Generate on this computer')`);
+  await waitFor(`$('.analyzing') !== null`);
+  await click(`byText('.bar', 'Labeling')`);
+  await waitFor(`${rowCount} === 4`);
+  check('while the local model works, the chart and the records list still respond', (await page(countText)) === '4 of 10 reports');
+  await click(`byText('.bar', 'Labeling')`);
+  await click(`byText('.analyzing .btn', 'Cancel')`);
+  await waitFor(`$('.analyzing') === null`);
+  check('cancelling a generation stops the animation, shows no error and keeps the earlier summary', await page(`$('.summary-alert') === null && $('.summary-result') !== null && ${summaryButton}.disabled === false`));
+  rmSync(join(aiDir, 'model.gguf.slow'));
+
+  // The model file disappears behind Valynce's back: a clear failure, and no fall-back.
+  rmSync(join(aiDir, 'model.gguf'));
+  await sleep(1200);
+  await click(summaryButton);
+  await waitFor(`byText('.summary .btn', 'Generate on this computer') !== undefined`);
+  await click(`byText('.summary .btn', 'Generate on this computer')`);
+  await waitFor(`$('.summary-alert') !== null`);
+  check('a missing model file is reported as such, with nothing downloaded and nothing sent online', (await page(`text('.summary-alert')`)).includes('missing or damaged') && downloadsSeen.length === fetched && model.requests.length === onlineBefore, await page(`text('.summary-alert')`));
+  await click(`byText('.summary .btn', 'Close')`);
+  await waitFor(`${panel}.includes('Offline AI was not set up') || ${panel}.includes('Offline AI is not installed')`);
+  await inBothThemes('offline-failed', { sizes: [[1440, 900]] });
+  await click(`byText('.summary .btn', 'Remove offline AI files')`);
+  await waitFor(`${panel}.includes('Offline AI is not installed') && !${panel}.includes('was not set up')`);
+  check('removing the offline AI files leaves the folder empty and keeps the stored summary', readdirSync(aiDir).filter((name) => !name.includes('.requests')).length === 0 && (await page(`$('.summary-result') !== null`)), readdirSync(aiDir).join(', '));
+  await click(`byText('.summary .btn', 'Discard summary')`);
+  await waitFor(`$('.summary-result') === null`);
 
   const outside = requested.filter((url) => !url.startsWith(base) && !url.startsWith('data:') && !url.startsWith('about:') && !url.startsWith('blob:'));
   check('the page itself made no requests to anything but the local server, also while summaries were generated', outside.length === 0, outside.join(', '));
@@ -1008,6 +1215,8 @@ try {
   server?.kill('SIGKILL');
   modelServer.closeAllConnections();
   modelServer.close();
+  downloadServer.closeAllConnections();
+  downloadServer.close();
   await sleep(300);
   rmSync(work, { recursive: true, force: true, maxRetries: 3 });
 }

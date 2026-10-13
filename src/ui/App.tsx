@@ -207,7 +207,7 @@ export function App() {
           <span className="here">NCR Analyzer</span>
         </p>
         <span className="spacer" />
-        <span className="local" title="Valynce is running on this computer. Records stay in a local database. Nothing is sent elsewhere unless you choose Generate summary and confirm it.">
+        <span className="local" title="Valynce is running on this computer. Records stay in a local database. Nothing is sent elsewhere unless you choose the online AI analysis and confirm it.">
           <span className="local-dot" aria-hidden="true" />
           Local
         </span>
@@ -277,8 +277,6 @@ export function App() {
                 onSeries={(unit) => setSeriesUnits({ ...seriesUnits, [metric]: unit })}
                 selected={filter.category}
                 onSelect={(category) => setFilter({ ...filter, category })}
-                onSummary={summary.open}
-                summaryBusy={summary.mode === 'sending'}
               />
               <SummaryPanel control={summary} stored={storedNumbers} onOpenRecord={openRecordByNumber} />
               {recordsPanel('Records')}

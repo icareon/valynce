@@ -29,6 +29,7 @@ export function createAnthropicProvider(options: AnthropicOptions): ModelProvide
   const send = options.fetchImpl ?? fetch;
 
   return {
+    location: 'online',
     name: 'Anthropic',
     model,
     host: base.host,

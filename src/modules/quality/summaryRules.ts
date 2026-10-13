@@ -13,6 +13,8 @@ export interface SummaryFinding {
   statement: string;
   /** NCR IDs from the evidence that the statement rests on. */
   recordIds: string[];
+  /** Present when Valynce wrote the statement from the ranking, as in an offline summary. Absent when the model wrote it. */
+  author?: 'valynce';
 }
 
 export interface AiSummary {

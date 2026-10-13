@@ -26,3 +26,14 @@ The fonts are used unmodified. Under the SIL Open Font License they may be bundl
 | Type definitions (`@types/node`, `@types/react`, `@types/react-dom`) | see `package.json` | MIT |
 
 Valynce also relies on Node.js and its built-in SQLite module, which are installed separately and are not redistributed here.
+
+## Downloaded on request for the offline AI, not shipped
+
+Valynce does not include or redistribute these. When you choose "Enable offline AI" and confirm, the app downloads them from their publishers to a folder on your computer, checks each against a pinned SHA-256, and runs them there. The exact files are listed in `src/ai/local/assets.ts`.
+
+| Component | Version | License | Source |
+|---|---|---|---|
+| Qwen3-1.7B, Q4_K_M GGUF quantization | revision `daeb8e2d` of `ggml-org/Qwen3-1.7B-GGUF` | Apache-2.0 | Model by Alibaba Cloud's Qwen team, https://huggingface.co/Qwen/Qwen3-1.7B. This quantization is published by ggml-org, https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF |
+| llama.cpp (prebuilt `llama-server`) | build `b11588` | MIT | Copyright (c) 2023-2026 The ggml authors. https://github.com/ggml-org/llama.cpp |
+
+Qwen's own GGUF repository offers this model in Q8_0 only, so the smaller Q4_K_M file comes from ggml-org, the maintainers of llama.cpp. The Apache-2.0 and MIT licenses permit this use and redistribution with their notices; each download carries its own license file.

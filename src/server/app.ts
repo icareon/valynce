@@ -1,6 +1,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { Hono } from 'hono';
+import type { OfflineAi } from '../ai/local/offline.ts';
 import type { ModelProvider } from '../ai/provider.ts';
 import type { NcrFields } from '../core/ncr.ts';
 import type { NcrStorage } from '../core/storage.ts';
@@ -20,10 +21,14 @@ export interface AppOptions {
    * proxies to this backend. Empty in the packaged app.
    */
   trustedOrigins?: readonly string[];
-  /** The model provider for summaries. Null or absent when no key is configured; everything else still works. */
+  /** The online model provider for summaries. Null or absent when no key is configured; everything else still works. */
   ai?: ModelProvider | null;
-  /** How long one summary request may take, in milliseconds. */
+  /** How long one online summary request may take, in milliseconds. */
   aiTimeoutMs?: number;
+  /** The offline AI on this computer. Absent in tests that do not involve it. */
+  offlineAi?: OfflineAi | null;
+  /** How long one offline summary request may take, in milliseconds. */
+  offlineTimeoutMs?: number;
 }
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -49,7 +54,7 @@ async function isFile(path: string): Promise<boolean> {
   }
 }
 
-export function createApp({ storage, loadSample, uiDir, trustedOrigins = [], ai = null, aiTimeoutMs }: AppOptions): Hono {
+export function createApp({ storage, loadSample, uiDir, trustedOrigins = [], ai = null, aiTimeoutMs, offlineAi = null, offlineTimeoutMs }: AppOptions): Hono {
   const app = new Hono();
   const uiRoot = resolve(uiDir);
 
@@ -107,7 +112,7 @@ export function createApp({ storage, loadSample, uiDir, trustedOrigins = [], ai 
   });
 
   registerImportRoutes(app, storage);
-  registerSummaryRoutes(app, storage, ai, aiTimeoutMs);
+  registerSummaryRoutes(app, storage, { online: ai, offline: offlineAi, onlineTimeoutMs: aiTimeoutMs, offlineTimeoutMs });
 
   app.all('/api/*', (c) => c.json({ error: 'Not found' }, 404));
 

@@ -2,9 +2,10 @@
 // evidence, with at most one repair call when the first reply fails a check.
 // There is no loop, no tool use and no agent.
 import type { EvidenceBundle } from '../modules/quality/evidence.ts';
+import { planGuided, validateGuided } from '../modules/quality/guidedSummary.ts';
 import { validateSummary } from '../modules/quality/summaryRules.ts';
 import type { AiSummary } from '../modules/quality/summaryRules.ts';
-import { repairMessage, SUMMARY_SCHEMA, SUMMARY_SYSTEM_PROMPT, summaryUserMessage } from './prompt.ts';
+import { GUIDED_SYSTEM_PROMPT, guidedSchema, guidedUserMessage, repairMessage, SUMMARY_SCHEMA, SUMMARY_SYSTEM_PROMPT, summaryUserMessage } from './prompt.ts';
 import { ProviderError } from './provider.ts';
 import type { ModelMessage, ModelProvider } from './provider.ts';
 
@@ -40,24 +41,34 @@ function parse(text: string): unknown {
   }
 }
 
+/** Output limit for the shorter offline reply: an overview and two sentences. */
+export const GUIDED_MAX_OUTPUT_TOKENS = 500;
+
 export async function generateSummary(
   provider: ModelProvider,
   bundle: EvidenceBundle,
   facts: readonly string[],
   signal: AbortSignal,
 ): Promise<SummaryRun> {
-  const messages: ModelMessage[] = [{ role: 'user', content: summaryUserMessage(bundle) }];
+  // The small offline model gets the shorter task; see guidedSummary.ts for why.
+  const plan = provider.location === 'offline' ? planGuided(bundle) : null;
+  const messages: ModelMessage[] = [{ role: 'user', content: plan === null ? summaryUserMessage(bundle) : guidedUserMessage(bundle, plan) }];
   let problems: string[] = [];
   for (let attempt = 1; attempt <= SUMMARY_MAX_CALLS; attempt += 1) {
     const reply = await provider.complete({
-      system: SUMMARY_SYSTEM_PROMPT,
+      system: plan === null ? SUMMARY_SYSTEM_PROMPT : GUIDED_SYSTEM_PROMPT,
       messages,
-      schema: SUMMARY_SCHEMA,
-      maxOutputTokens: SUMMARY_MAX_OUTPUT_TOKENS,
+      schema: plan === null ? SUMMARY_SCHEMA : guidedSchema(plan),
+      maxOutputTokens: plan === null ? SUMMARY_MAX_OUTPUT_TOKENS : GUIDED_MAX_OUTPUT_TOKENS,
       signal,
     });
     const parsed = parse(reply.text);
-    const check = parsed === undefined ? { ok: false as const, problems: ['The reply was not one valid JSON object within the size limit.'] } : validateSummary(parsed, bundle, facts);
+    const check =
+      parsed === undefined
+        ? { ok: false as const, problems: ['The reply was not one valid JSON object within the size limit.'] }
+        : plan === null
+          ? validateSummary(parsed, bundle, facts)
+          : validateGuided(parsed, bundle, facts, plan);
     if (check.ok) return { summary: check.summary, attempts: attempt };
     problems = check.problems;
     // The model's own reply goes back to it only when it is small enough to be worth correcting.

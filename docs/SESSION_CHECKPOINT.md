@@ -1,38 +1,31 @@
 # Session checkpoint
 
-**Stop point: October 12, 2026**, on branch `main`. Increment 4 is complete and published to GitHub as the `v0.1.0-alpha.8` prerelease.
+**Stop point: October 13, 2026**, on branch `main`. NCR V1 is closed as an alpha: offline and online AI analysis are integrated, evaluated and published to GitHub as the `v0.1.0-alpha.9` prerelease.
 
-> **First task next session: deeper AI validation before adding features.** The checks are listed under "First task next session" below. Do not publish to npm or announce on X until Paul asks for it. If you are a coding agent reading this at the start of a session, wait for an explicit request before changing product code.
+> **Further NCR features are deferred** until feedback from people using it identifies a concrete need. Do not publish to npm or announce on X until Paul asks for it. If you are a coding agent reading this at the start of a session, wait for an explicit request before changing product code.
 
 ## Where things stand
 
 | | |
 |---|---|
-| Completed | Increment 4: the optional, evidence-linked AI summary, with its live verification and the fixes that came out of it, on top of Increments 1 to 3 and the two interface refinements |
-| Branch | `main`, pushed to GitHub on October 12, 2026 with the two Increment 4 commits and a documentation commit that refreshed the README. |
-| Product tag | `v0.1.0-alpha.8`, pushed. `v0.1.0-alpha.7` is Increment 4 before live verification; its tag exists locally only and was not pushed, though its commit is in `main`. |
-| Earlier tags | `v0.1.0-alpha.6` is the borderless summary with USD-only cost, `alpha.5` the scrolling fix, `alpha.4` Increment 3, and `alpha.1` to `alpha.3` the earlier increments. None were moved. |
-| GitHub prereleases | `v0.1.0-alpha.4`, `v0.1.0-alpha.5`, `v0.1.0-alpha.6` and `v0.1.0-alpha.8`. None for `alpha.7`. |
+| Completed | NCR V1: import, three Pareto rankings, source records, ranking export, and optional AI analysis with a choice of an offline model on this computer or the online provider. The deferred AI evaluation is done. |
+| Branch | `main`, pushed to GitHub on October 13, 2026. |
+| Product tag | `v0.1.0-alpha.9`, pushed. |
+| Earlier tags | `v0.1.0-alpha.8` is the online AI summary after live verification, `alpha.7` the same before it (its tag exists locally only; its commit is in `main`), `alpha.6` the borderless summary with USD-only cost, `alpha.5` the scrolling fix, `alpha.4` Increment 3, and `alpha.1` to `alpha.3` the earlier increments. None were moved. |
+| GitHub prereleases | `v0.1.0-alpha.4`, `alpha.5`, `alpha.6`, `alpha.8` and `alpha.9`. None for `alpha.7`. |
 | Repository | https://github.com/icareon/valynce |
-| Next planned | Deeper AI validation, first and before any feature. After that: export of the reports themselves. The roadmap is in `docs/REFERENCE.md`. |
+| Next planned | Nothing. Wait for user feedback. Candidates are listed under Roadmap in `docs/REFERENCE.md`. |
 
-The README was cut down to a short overview on October 11, 2026, and refreshed on October 12, 2026 with one light and dark comparison (`docs/screenshots/overview-light-dark.png`), a workflow and the AI wording. Data locations, definitions, limitations and the roadmap are in `docs/REFERENCE.md`.
+The README was refreshed on October 13, 2026 for the two AI options, with one light and dark comparison (`docs/screenshots/overview-light-dark.png`). Data locations, definitions, the AI options, evaluation results, performance, limitations and the roadmap are in `docs/REFERENCE.md`.
 
-## First task next session
+## Is NCR V1 ready for users?
 
-Deeper AI validation before adding features. None of this has been done yet:
+Ready as an early alpha for a technically comfortable user on macOS who runs it from the repository and reviews AI drafts against the reports. Not ready to hand to a non-technical user or to rely on unreviewed:
 
-- Review live summaries through the actual browser panel, and click the citations.
-- Use a larger, more varied synthetic evaluation set.
-- Check numbers written as words.
-- Check that figures attach to the correct report or category when several entities appear in one sentence.
-- Check the scope of whole-analysis counts and of selected-category counts.
-- Check wrong statuses, comparisons, ranking and exclusion explanations.
-- Check ambiguous category names such as "Other".
-- Record both unsupported claims that pass and accurate claims that are rejected.
-- Repeat the live checks against the final code, and report the sample size and the actual outcomes.
-
-The starting point is the live result and the known gaps recorded below and in `docs/REFERENCE.md`. `npm run check:ai:live` prints every reply, including rejected ones.
+- It runs from a git clone with `npm ci && npm run build && npm start`. There is no packaged launcher and nothing on npm.
+- Only macOS with Chrome has been run. Offline AI has been run on one Apple Silicon Mac; Linux is implemented and untested; Windows has no offline AI.
+- No person has reviewed the interface or the AI summaries. All review was by the coding agent.
+- AI summaries are drafts. The checks do not guarantee accuracy, and both models produced wrong or loose statements that passed on synthetic data. Neither model has been tried on real records.
 
 One thing to know about the history: on October 11, 2026 every commit message was rewritten once to remove a co-author line, and `main` and tags `alpha.1` to `alpha.4` were pushed again with new commit IDs. File contents at each tag did not change. Commits must not carry AI co-author lines.
 
@@ -85,6 +78,17 @@ One thing to know about the history: on October 11, 2026 every commit message wa
 - The panel shows loading, failure and timeout without blocking the app, labels facts and hypotheses, and makes cited report IDs open the report.
 - The wording about external requests in the README, the reference and the app bar now separates normal local use from the optional summary.
 
+**Offline and online AI analysis, and the deferred evaluation** (`v0.1.0-alpha.9`)
+- "AI analysis" section under the chart with two options: "Offline · Private" (Qwen3 1.7B on this computer) and "Online · Frontier" (Claude through Anthropic). The choice is remembered in the browser. The server generates with the provider named in the request or refuses; it never falls back, and a stored summary keeps its provider (`location` column, schema version 6, backup written first, existing summaries marked online).
+- Offline runtime: llama.cpp's official prebuilt `llama-server`, build `b11588`, downloaded on request and run as a child process on `127.0.0.1` behind a per-run key, with its web page and downloads off, non-thinking mode, one slot, 8,192-token context. Chosen over an npm binding so that the package stays small, no native dependency or install script is added, and no Ollama or Python is needed. Windows builds are zip files and are not handled, so the option reports itself unavailable there.
+- Offline model: Qwen3-1.7B Q4_K_M, 1,282,439,264 bytes, from `ggml-org/Qwen3-1.7B-GGUF` at a pinned revision (Qwen's own GGUF repository has Q8_0 only). Apache-2.0; llama.cpp is MIT. Neither is redistributed.
+- Set-up: "Enable offline AI" shows the size and sources, "Download" starts it, with progress and cancel. Files go to a temporary name, are checked for size and SHA-256, then moved into place; a verified file is reused; too little disk space, a corrupt file, an interrupted or cancelled download each leave nothing installed. Files live in `resolveAiDir()` (`src/core/paths.ts`), outside the repository and the database folder. Nothing is downloaded or started at start-up.
+- The offline summary is the shorter, guided one (`src/modules/quality/guidedSummary.ts`): Valynce writes the figures, the ranked finding, the missing information and the suggested checks; the model writes an overview and one sentence per leading category from descriptions alone, with citations restricted to the category by the runtime's grammar. The full task was tried first and was not reliable (7 requests, 1 accepted, with a false statement).
+- Offline limits: 40 reports and 12,000 characters, refused beyond that. Instruction-like descriptions are kept from the offline model and named in the summary.
+- "Analyzing NCRs…" animation: a 28px square with four orange dots moving round its edge, CSS only, static under reduced motion, hidden from screen readers, with the status in a `role="status"` element. Downloads use a separate progress bar measured in bytes. A running generation can be cancelled.
+- A race found in the real browser run was fixed: a confirmation could be given while the panel still held the answer for the previous metric, and the server then refused it as changed. The panel now waits for the answer that belongs to the analysis on screen.
+- New: `npm run check:ai:eval`, `fixtures/ai-eval-varied.csv` (30 synthetic reports), `tests/offline.test.ts`, `scripts/browser-check-server.mjs`.
+
 **Live verification of the AI summary** (`v0.1.0-alpha.8`)
 - Figures are now tied to what a sentence is about: a number must be the evidence's figure for a report or category the sentence names (or, when it names no report, one the finding cites), or for the analysis as a whole. A share is not accepted as a count or an amount. Before, any number found anywhere in the evidence passed.
 - A finding must cite every report its text names, at least one report in a category it names, and a report that has the reported cause it speaks of. Before, any valid ID passed.
@@ -93,6 +97,28 @@ One thing to know about the history: on October 11, 2026 every commit message wa
 - `npm run check:ai:live` prints every reply in full, including a rejected first reply and the reasons.
 
 ## Verification actually completed
+
+Offline and online AI analysis, on macOS 26.5 with Node 24.21.0, an Apple M4 with 10 cores and 24 GB of memory, October 13, 2026:
+
+- `npm run typecheck`, `npm test` (110 tests: 16 new in `tests/offline.test.ts`, 1 new in `tests/ai.test.ts`) and `npm run build` passed.
+- `npm run check:browser` passed all 309 checks (57 new). The existing checks still cover import, mapping and validation, all three Pareto metrics, source details, export, both themes and the narrow viewport. The new ones cover the provider choice and its wording, the remembered choice, no download or generation on selection, the real 1.29 GB size shown before anything is fetched, the set-up question, download progress, cancel, ready, the offline confirmation and its wording, the animation and reduced motion, the offline result and its provenance, citations, the outdated mark, no relabelling when the other provider is selected, cancelling a generation, a missing model file, removing the files, and that offline generation contacted neither the online stand-in nor the download server. They use a pretend model and runtime served from the same machine; no real model is downloaded by the checks.
+- The pinned files were checked against their publishers on October 13, 2026: sizes and SHA-256 digests from the Hugging Face and GitHub APIs match the files downloaded.
+- Real set-up in the browser: "Enable offline AI" then "Download 1.29 GB" in headless Chrome fetched the real runtime and model in 51 seconds, verified them, and reached Ready. The model file's SHA-256 was computed independently afterwards and matches the pin.
+- Real offline generation with the network blocked: the Valynce server and the model process were run under a macOS sandbox profile denying all outbound connections except to loopback. Offline summaries were generated in the browser (4.5 and 3.9 seconds), no non-loopback connection from either process was seen, and the page made no outside request. From the same sandboxed server the online option failed with "Could not reach api.anthropic.com" and the stored offline summary stayed, which shows both that the block was real and that nothing falls back.
+- Real online generation in the browser with the configured key: the confirmation listed provider, model, host, 30 reports and the fields sent and withheld; the summary arrived in 7 seconds; four citations were clicked and opened the right reports; changing the metric marked it outdated; selecting the offline option afterwards did not relabel it.
+- Evaluation, synthetic data only, replies read against the fixtures by the coding agent. `npm run check:ai:eval` on the final code: offline 10 of 10 accepted with no corrections and 2 loose statements in 26 model-written sentences; online 10 of 10 accepted with one correction (an accurate self-computed figure refused) and no wrong statement found. Neither followed the planted instructions. Earlier runs while the offline task was being settled: offline 20 requests, 19 accepted, 4 wrong statements passed, 1 accurate reply rejected; online 10 requests, 10 accepted, 1 wrong statement passed (a count written as a word). The full task offline: 7 requests, 1 accepted. Details and the known gaps are in `docs/REFERENCE.md` under "Evaluation".
+- Offline performance on this computer: first summary 4.3 to 7 seconds (16 seconds once, straight after the download), later ones 1.4 to 4.3 seconds with a median of 2.1, model process up to 3.1 GB resident. 40 reports took under 5 seconds and 11,000 characters of descriptions about 6.
+- The scripted wrong claims in `tests/ai.test.ts` record which classes the checks catch (figure on the wrong report, unknown citation, root cause, savings, a category cited through the wrong reports) and which they let through (counts as words, swapped figures between two named entities, whole-analysis counts given to one category, wrong status, comparison, ranking or exclusion reason, and the word "Other").
+- The database upgrade from version 5 to 6 is tested on a version 5 database built in the test: the stored summary is kept, marked online, and a backup is written.
+
+Not done for this increment:
+
+- Offline AI on Linux or on an Intel Mac. Those builds are pinned and untested. No Windows support.
+- A computer with less memory, no GPU or a slow processor.
+- Turning the machine's network off. Isolation was done with a sandbox around the server and model processes, not by disconnecting the computer.
+- Whether the runtime really unloads the model after five idle minutes. The setting is passed; it was not measured.
+- A person looking at the interface or reading the summaries.
+- The real database was not opened by any check. Its upgrade to version 6 happens, with a backup, the first time `alpha.9` is started against it.
 
 README refresh, October 12, 2026:
 
@@ -145,8 +171,8 @@ After publication, CI on GitHub runs installation, type checking, tests and the 
 
 These need a person, and none has been done:
 
-- **A summary in the app with a real key, used by a person.** The live check calls the server's routes directly. The panel showed a live reply twice during the README capture, driven by a script; nobody clicked its citations.
-- **A person reading live summaries.** The replies were read by the coding agent. The checks cannot tell whether a sentence misreads a report, and numbers written as words are not checked; see `docs/REFERENCE.md`.
+- **A person using AI analysis.** Both options were driven in the real browser by a script, with the real model and a real key. No person has used them or read the summaries. The checks cannot tell whether a sentence misreads a report; see `docs/REFERENCE.md`.
+- **Offline AI on other computers**: Linux, Intel Macs, machines with less memory.
 - **Human visual review** of the interface in both themes, including comparison with the intended reference design.
 - **Full playback** of the demo video from start to finish.
 - **Platform checks**: Windows, Linux desktop, Safari and Firefox.
@@ -176,14 +202,15 @@ npm test
 npm run build && npm run check:browser    # needs Chrome; writes screenshots
 npm run build && npm run demo:record      # writes demo/out/valynce-pareto-demo.mp4
 npm run check:ai:live                     # needs ANTHROPIC_API_KEY; sends only synthetic data
+npm run check:ai:eval                     # offline needs offline AI enabled in the app; online sends only synthetic data
 ```
 
-To reproduce the tagged alpha exactly: `git checkout v0.1.0-alpha.8 && npm ci && npm run build && npm test`.
+To reproduce the tagged alpha exactly: `git checkout v0.1.0-alpha.9 && npm ci && npm run build && npm test`.
 
 ## When work resumes
 
 1. Read `AGENTS.md`, then this file.
 2. Check `git status`. The Remotion project in `demo/` and a related paragraph in `AGENTS.md` are deliberately uncommitted; leave them unless asked.
 3. Re-run the checks above before changing anything.
-4. Start with the deeper AI validation listed under "First task next session". Do not add features before it.
+4. Do not add NCR features without a concrete need from user feedback.
 5. Do not publish to npm or post to X unless asked.

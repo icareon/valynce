@@ -25,13 +25,37 @@ export interface ModelReply {
   outputTokens: number | null;
 }
 
+/** Where a model runs: on this computer, or at an external provider. */
+export type AiLocation = 'offline' | 'online';
+
 export interface ModelProvider {
+  /** Offline providers run on this computer and send nothing outside it. */
+  location: AiLocation;
   /** Who receives the data, as shown to the user before anything is sent. */
   name: string;
   model: string;
-  /** The host the request goes to. */
+  /** The host the request goes to. For an offline provider this is the loopback address. */
   host: string;
   complete(request: ModelRequest): Promise<ModelReply>;
+}
+
+export type OfflineState = 'unsupported' | 'not_installed' | 'downloading' | 'ready' | 'failed';
+
+/** What the interface shows about the offline AI. It holds sizes and names, never a path to user data. */
+export interface OfflineStatus {
+  state: OfflineState;
+  model: { label: string; id: string; bytes: number; source: string };
+  /** Null when Valynce cannot manage a runtime on this platform. */
+  runtime: { name: string; build: string; bytes: number; source: string } | null;
+  /** Everything a set-up downloads, in bytes. */
+  totalBytes: number;
+  /** While downloading: what is being fetched and how far it is. */
+  step: 'runtime' | 'model' | 'checking' | null;
+  receivedBytes: number;
+  /** Why set-up failed or cannot run here, in words that can be shown. */
+  message: string | null;
+  /** The folder the files are kept in, so the user can find or remove them. */
+  folder: string;
 }
 
 export type ProviderFailure =
@@ -42,7 +66,11 @@ export type ProviderFailure =
   | 'refused'
   | 'truncated'
   | 'provider_error'
-  | 'bad_reply';
+  | 'bad_reply'
+  /** The offline model or its runtime is not installed. */
+  | 'not_installed'
+  /** The offline runtime could not start or stopped answering. */
+  | 'runtime';
 
 /** A failed request, with a message that is safe to show: it never contains the key or the records. */
 export class ProviderError extends Error {

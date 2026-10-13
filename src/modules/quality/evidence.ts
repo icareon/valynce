@@ -8,7 +8,7 @@ import { computePareto, PARETO_METRICS, pickSeries, plainValue, unitLabel } from
 import type { ParetoMetric } from './pareto.ts';
 import { REPORTING_CURRENCY } from './totals.ts';
 
-/** The most reports one request may carry. A larger selection is refused, never cut short. */
+/** The most reports one request may carry. A larger selection is refused, never cut short. The offline model has a lower limit, passed to buildEvidence. */
 export const MAX_EVIDENCE_RECORDS = 200;
 /** The most categories one request may carry. */
 export const MAX_EVIDENCE_CATEGORIES = 40;
@@ -114,7 +114,7 @@ export interface EvidenceDisclosure {
   shortenedTexts: number;
 }
 
-export type EvidenceRefusal = 'no_reports' | 'nothing_to_rank' | 'empty_category' | 'too_many_records' | 'too_many_categories';
+export type EvidenceRefusal = 'no_reports' | 'nothing_to_rank' | 'empty_category' | 'too_many_records' | 'too_many_categories' | 'too_long';
 
 export type EvidenceResult =
   | { ok: true; bundle: EvidenceBundle; disclosure: EvidenceDisclosure; facts: string[] }
@@ -161,7 +161,7 @@ function shorten(text: string | null): { text: string | null; cut: boolean } {
  * is the reports matching search and status, as for the chart. The reports
  * listed are that population, or only the selected category when one is selected.
  */
-export function buildEvidence(stored: readonly NcrRecord[], scope: AnalysisScope): EvidenceResult {
+export function buildEvidence(stored: readonly NcrRecord[], scope: AnalysisScope, maxRecords: number = MAX_EVIDENCE_RECORDS): EvidenceResult {
   const { metric } = scope;
   const population = filterRecords(stored, { search: scope.search, status: scope.status, category: undefined });
   if (population.length === 0) {
@@ -189,12 +189,12 @@ export function buildEvidence(stored: readonly NcrRecord[], scope: AnalysisScope
   if (listed.length === 0) {
     return { ok: false, reason: 'empty_category', message: 'The selected category has no reports under the current search and status filter.' };
   }
-  if (listed.length > MAX_EVIDENCE_RECORDS) {
+  if (listed.length > maxRecords) {
     return {
       ok: false,
       reason: 'too_many_records',
       message:
-        `This selection has ${many(listed.length, 'report')}. A summary request carries at most ${MAX_EVIDENCE_RECORDS}, and Valynce does not send a partial selection. ` +
+        `This selection has ${many(listed.length, 'report')}. A summary request ${maxRecords < MAX_EVIDENCE_RECORDS ? 'to the offline model ' : ''}carries at most ${maxRecords}, and Valynce does not use a partial selection. ` +
         (selected ? 'Narrow it with the search or the status filter.' : 'Narrow it with the search or the status filter, or select one category in the chart.'),
     };
   }

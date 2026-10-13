@@ -4,6 +4,7 @@ import type {
   ImportRequest,
   LoadSampleResponse,
   NcrListResponse,
+  OfflineStatusResponse,
   RemoveImportResponse,
   RemoveSampleResponse,
   RemoveSummaryResponse,
@@ -60,4 +61,8 @@ export const checkSummary = (body: SummaryCheckRequest, signal?: AbortSignal) =>
   request<SummaryCheckResponse>('/api/summary/check', 'POST', body, signal);
 export const generateSummary = (body: SummaryGenerateRequest, signal?: AbortSignal) =>
   request<SummaryGenerateResponse>('/api/summary', 'POST', body, signal);
+export const offlineStatus = () => request<OfflineStatusResponse>('/api/ai/offline');
+export const installOffline = () => request<OfflineStatusResponse>('/api/ai/offline/install', 'POST');
+export const cancelOffline = () => request<OfflineStatusResponse>('/api/ai/offline/cancel', 'POST');
+export const removeOffline = () => request<OfflineStatusResponse>('/api/ai/offline', 'DELETE');
 export const removeSummary = (id: number) => request<RemoveSummaryResponse>(`/api/summary/${id}`, 'DELETE');
