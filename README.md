@@ -41,6 +41,8 @@ Open [http://127.0.0.1:4310](http://127.0.0.1:4310). A new installation starts e
 
 ## Optional AI analysis
 
+Offline analysis uses a small local model for brief, guided summaries without sending NCR data off-device. Online frontier-model analysis provides more capable, detailed explanations and requires explicitly sending selected data to Anthropic. Both produce drafts that require review against source records.
+
 Under the chart, **AI analysis** offers two options. Your choice is remembered in your browser, and Valynce never switches from one to the other.
 
 | | Offline · Private | Online · Frontier |

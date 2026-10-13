@@ -2,6 +2,8 @@
 
 **Stop point: October 13, 2026**, on branch `main`. NCR V1 is closed as an alpha: offline and online AI analysis are integrated, evaluated and published to GitHub as the `v0.1.0-alpha.9` prerelease.
 
+> **NCR V1 frozen at v0.1.0-alpha.9. Paul reviewed the interface and found it usable, with noticeably weaker offline analysis. Further features are deferred until user feedback identifies a concrete need.**
+>
 > **Further NCR features are deferred** until feedback from people using it identifies a concrete need. Do not publish to npm or announce on X until Paul asks for it. If you are a coding agent reading this at the start of a session, wait for an explicit request before changing product code.
 
 ## Where things stand
@@ -24,7 +26,7 @@ Ready as an early alpha for a technically comfortable user on macOS who runs it 
 
 - It runs from a git clone with `npm ci && npm run build && npm start`. There is no packaged launcher and nothing on npm.
 - Only macOS with Chrome has been run. Offline AI has been run on one Apple Silicon Mac; Linux is implemented and untested; Windows has no offline AI.
-- No person has reviewed the interface or the AI summaries. All review was by the coding agent.
+- Paul reviewed the interface on October 13, 2026 and found it usable, with offline analysis noticeably weaker than online. That is one informal review; no person has checked the AI summaries sentence by sentence against the reports, and the evaluation replies were read by the coding agent only.
 - AI summaries are drafts. The checks do not guarantee accuracy, and both models produced wrong or loose statements that passed on synthetic data. Neither model has been tried on real records.
 
 One thing to know about the history: on October 11, 2026 every commit message was rewritten once to remove a co-author line, and `main` and tags `alpha.1` to `alpha.4` were pushed again with new commit IDs. File contents at each tag did not change. Commits must not carry AI co-author lines.
@@ -169,9 +171,9 @@ After publication, CI on GitHub runs installation, type checking, tests and the 
 
 ## Still outstanding
 
-These need a person, and none has been done:
+These need a person. Paul's review on October 13, 2026 covered using the interface and both AI options informally; the rest has not been done:
 
-- **A person using AI analysis.** Both options were driven in the real browser by a script, with the real model and a real key. No person has used them or read the summaries. The checks cannot tell whether a sentence misreads a report; see `docs/REFERENCE.md`.
+- **A person checking AI summaries against the reports.** Both options were driven in the real browser by a script, with the real model and a real key, and Paul then used the app and judged offline analysis noticeably weaker than online. No person has checked summaries statement by statement. The checks cannot tell whether a sentence misreads a report; see `docs/REFERENCE.md`.
 - **Offline AI on other computers**: Linux, Intel Macs, machines with less memory.
 - **Human visual review** of the interface in both themes, including comparison with the intended reference design.
 - **Full playback** of the demo video from start to finish.

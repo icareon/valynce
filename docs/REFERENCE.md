@@ -28,6 +28,8 @@ Technical detail that does not belong in the [README](../README.md). The rules c
 
 ## AI analysis
 
+Offline analysis uses a small local model for brief, guided summaries without sending NCR data off-device. Online frontier-model analysis provides more capable, detailed explanations and requires explicitly sending selected data to Anthropic. Both produce drafts that require review against source records.
+
 Optional. Under the chart, the **AI analysis** section drafts a short summary of the analysis on screen. It offers two providers. You choose one; the choice is remembered in your browser; and Valynce never switches to the other, whether one is missing, fails or is slow. A stored summary keeps the provider and model it came from, also after you select the other one.
 
 | | Offline · Private | Online · Frontier |
@@ -196,7 +198,7 @@ This is an early alpha. Expect rough edges.
 - **One grouping.** The Pareto chart groups by defect category only.
 - **Cost analysis in USD only.** The cost total and cost ranking cover costs stated in US dollars. Other currencies are stored and listed, and counted as left out, but not totalled or ranked yet.
 - **Built-in SQLite.** Storage uses Node's `node:sqlite` module, which Node labels a release candidate.
-- **An AI summary is a draft.** It is optional and keeps only the most recent summary. Its checks do not guarantee factual accuracy; both models produced occasional wrong or loose statements that passed (see [Evaluation](#evaluation)). Neither has been evaluated on real records, and no person has reviewed the replies. The wording checks are in English.
+- **An AI summary is a draft.** It is optional and keeps only the most recent summary. Its checks do not guarantee factual accuracy; both models produced occasional wrong or loose statements that passed (see [Evaluation](#evaluation)). Neither has been evaluated on real records, and no person has checked the evaluation replies against the reports. In the one review by a person so far, offline analysis was noticeably weaker than online. The wording checks are in English.
 - **Offline AI is limited.** The summary is the shorter one, 40 reports per request, on macOS and Linux only, and it has been run on one Apple Silicon Mac. It needs about 3 GB of free memory while it works.
 
 ## Roadmap
